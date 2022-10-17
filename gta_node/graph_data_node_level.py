@@ -35,12 +35,12 @@ class GraphData:
         if attention_type == 1:
             masked_ad = np.zeros_like(self.adj_mat)
             masked_ad[:, attention_set] = self.adj_powers[walk_len][:, attention_set]
-            return np.matmul(masked_ad, self.features)[attention_set, :]
+            return np.matmul(masked_ad, self.features)
         elif attention_type == 4:
             diag = self.adj_powers[walk_len].diagonal()
             masked_ad = np.zeros_like(self.adj_mat)
             np.fill_diagonal(masked_ad, diag)
-            return np.matmul(masked_ad, self.features)[attention_set, :]
+            return np.matmul(masked_ad, self.features)
         else:
             print(
                 'Invalid attention type ' + str(attention_type) + '. Valid attentions for node-level tasks are 1 and 4')
