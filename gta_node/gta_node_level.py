@@ -29,6 +29,7 @@ class GTANode(BaseEstimator, RegressorMixin):
                  ):
         self.train_total_gain = None
         self.train_L2 = None
+        self.trained_tree_ = None  # root
         self.tree_learner_ = None
         self.tree_learner = None
         self.walk_lens = walk_lens
@@ -78,6 +79,7 @@ class GTANode(BaseEstimator, RegressorMixin):
             Estimator instance.
         """
         if not params:
+
             return self
         valid_params = self.get_params(deep=True)
 
@@ -107,6 +109,9 @@ class GTANode(BaseEstimator, RegressorMixin):
         y = y.flatten()
         if len(X) != len(y):
             raise ValueError("Size of X and y mismatch")
+
+        self.graph.compute_walks(self.walk_lens[-1])
+
         params = TreeNodeLearnerParams(
             walks_lens=self.walk_lens,
             max_attention_depth=self.max_attention_depth,
@@ -116,7 +121,8 @@ class GTANode(BaseEstimator, RegressorMixin):
             graph=self.graph,
             attention_types=self.attention_types
         )
-        self.tree_learner_ = TreeNodeLearner(params, list(range(0, self.graph.get_number_of_nodes())), None)
+        self.tree_learner_ = TreeNodeLearner(params=params, active=list(range(0, self.graph.get_number_of_nodes())),
+                                             parent=None)
         self.train_L2, self.train_total_gain = self.tree_learner_.fit(X, y)
         return self
 

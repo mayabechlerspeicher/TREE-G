@@ -16,6 +16,19 @@ class TrainedTreeNode:
                  aggregator: Aggregator = None,
                  attention_type: int = None,
                  ):
+        """
+
+        :param gt: Pointer to the node that is reached if the feature value is greater than the threshold
+        :param lte: Pointer to the node that is reached if the feature value is less than or equal to the threshold
+        :param feature_index: The index of the feature that is used to split the data
+        :param thresh: The chosen optimal threshold
+        :param value_as_leaf: The mean of the labels of the examples that reaches this node
+        :param walk_len: The chosen walk length
+        :param active_attention_index: the attention index in the available attention list
+        :param max_attention_depth: The maximum distance from the node where the attentions are considered as available attentions
+        :param aggregator: The chosen aggregator
+        :param attention_type: The chosen attention type
+        """
         self.gt = gt
         self.lte = lte
         self.aggregator = aggregator
@@ -46,7 +59,7 @@ class TrainedTreeNode:
             for a in attentions_cache:
                 attentions += a
             attention = attentions[pnt.active_attention_index]
-            pa = g.propagate_with_attention(pnt.walk_len, attention, pnt.attention_type)
+            pa = g.propagate_with_attention(pnt.walk_len, str(attention), pnt.attention_type)
             col = pa[:, pnt.feature_index]
             score = pnt.aggregator.get_score(col)
             new_attentions = pnt.aggregator.get_generated_attentions(col, pnt.thresh)

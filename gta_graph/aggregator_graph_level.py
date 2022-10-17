@@ -25,6 +25,7 @@ class Aggregator:
         new_attentions = []
         raw_attentions = self.attention_set_generator(activations, threshold)
         for raw in raw_attentions:
+
             if type(raw) is tuple:
                 new_attentions.append(raw[0].tolist())
             else:
@@ -35,21 +36,31 @@ class Aggregator:
         return self.name
 
 
-def _gen_normalized(x, threshold):
+def _generate_attention_sets_normalized(x, threshold):
+    """
+    Splits the examples by the normalized threshold. The normalization is by the size of the attention set.
+    First are the (a ttention set)examles greater or equal to the normalized threshold,
+    Seconds are the examples less than the normalized threshold
+    :param x: The active attention set.
+    :param threshold: The threshold set in the
+    :return: An array of size two,
+    where the first element is the indices of the examples greater or equal to the normalized threshold
+    and the second element is the indices of the examples less than the normalized threshold.
+    """
     return [np.where(x >= threshold / x.size),
             np.where(x < threshold / x.size)]
 
 
-def _gen_plain(x, threshold):
+def _generate_attention_sets_plain(x, threshold):
     return [np.where(x >= threshold), np.where(x < threshold)]
 
 
-sum = Aggregator(lambda x: np.sum(x), _gen_normalized, "sum")
+sum = Aggregator(lambda x: np.sum(x), _generate_attention_sets_normalized, "sum")
 
-avg = Aggregator(lambda x: np.mean(x), _gen_plain, "avg")
+avg = Aggregator(lambda x: np.mean(x), _generate_attention_sets_plain, "avg")
 
-max = Aggregator(lambda x: np.max(x), _gen_plain, "max")
+max = Aggregator(lambda x: np.max(x), _generate_attention_sets_plain, "max")
 
-min = Aggregator(lambda x: np.min(x), _gen_plain, "min")
+min = Aggregator(lambda x: np.min(x), _generate_attention_sets_plain, "min")
 
 graph_level_aggregators = [sum, avg, max, min]

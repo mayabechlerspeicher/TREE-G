@@ -27,7 +27,7 @@ class GTAGraph(BaseEstimator, RegressorMixin):
                  max_number_of_leafs: int = 10,
                  min_gain: float = 0.0,
                  min_leaf_size: int = 10,
-                 attention_types: List[int] = [1, 2, 3, 4, 5],
+                 attention_types: List[int] = [1, 2, 3, 4],
                  ):
         self.walk_lens = walk_lens
         self.max_attention_depth = max_attention_depth
@@ -36,10 +36,11 @@ class GTAGraph(BaseEstimator, RegressorMixin):
         self.min_gain = min_gain
         self.min_leaf_size = min_leaf_size
         self.attention_types = attention_types
-        self.trained_tree_ = None
+        self.trained_tree_root_ = None
         self.train_L2 = None
         self.train_total_gain = None
-        self.tree_learner_ = None
+        self.tree_learner_root_ = None
+        self.stats_dict = None
 
     def get_params(self, deep=True):
         """
@@ -110,6 +111,10 @@ class GTAGraph(BaseEstimator, RegressorMixin):
 
         if len(X) != len(y):
             raise ValueError("Size of X and y mismatch")
+
+        for graph in X:
+            graph.compute_walks(self.walk_lens[-1])
+
         params = TreeNodeLearnerParams(
             walk_lens=self.walk_lens,
             max_attention_depth=self.max_attention_depth,
@@ -119,15 +124,15 @@ class GTAGraph(BaseEstimator, RegressorMixin):
             min_leaf_size=self.min_leaf_size,
             attention_types=self.attention_types,
         )
-        self.tree_learner_ = TreeNodeLearner(params, list(range(0, len(X))), None)
-        self.train_L2, self.train_total_gain = self.tree_learner_.fit(X, y)
-        self.trained_tree_ = self.tree_learner_.build_trained_tree_and_get_root()
+        self.tree_learner_root_ = TreeNodeLearner(params=params, active=list(range(0, len(X))), parent=None)
+        self.train_L2, self.train_total_gain, self.stats_dict = self.tree_learner_root_.fit(X, y)
+        self.trained_tree_root_ = self.tree_learner_root_.build_trained_tree_and_get_root()
         return self
 
     def predict(self, X: List[GraphData]):
         if isinstance(X, np.ndarray):
             X = X[0, :].tolist()
-        predictions = [self.trained_tree_.predict(x)[0] for x in X]
+        predictions = [self.trained_tree_root_.predict(x)[0] for x in X]
         array = np.array(predictions)
         if array.ndim == 1:
             array = array.reshape(-1, 1)
@@ -137,7 +142,7 @@ class GTAGraph(BaseEstimator, RegressorMixin):
     def nodes_scores(self, g: GraphData):
 
         num_of_nodes = g.get_number_of_nodes()
-        pred = self.trained_tree_.predict(g)
+        pred = self.trained_tree_root_.predict(g)
         pred_val = pred[0]
         histogram = pred[1]
         rank_ties = rankdata(histogram) * 10
@@ -147,4 +152,4 @@ class GTAGraph(BaseEstimator, RegressorMixin):
         return np.array(nodes_scores)
 
     def print(self):
-        self.trained_tree_.print_tree()
+        self.trained_tree_root_.print_tree()

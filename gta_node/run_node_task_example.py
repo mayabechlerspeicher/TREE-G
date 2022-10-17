@@ -2,9 +2,7 @@ import numpy as np
 import datasets
 from gta_node_level import GTANode
 from starboost import BoostingClassifier
-
 from gta_graph.data_formetter import DataFormatter
-
 from gta_node.graph_data_node_level import GraphData
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, accuracy_score, roc_auc_score

@@ -1,6 +1,6 @@
 from gta_node.graph_data_node_level import GraphData
 import numpy as np
-from networkx.generators.random_graphs import watts_strogatz_graph, barabasi_albert_graph, fast_gnp_random_graph
+from networkx.generators.random_graphs import fast_gnp_random_graph
 from networkx.linalg.graphmatrix import adjacency_matrix
 
 
