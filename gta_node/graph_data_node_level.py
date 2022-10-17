@@ -54,7 +54,7 @@ class GraphData:
         for walk_len in walk_lens:
             for attention in available_attentions:
                 for attention_type in attention_types:
-                    p = self.propagate_with_attention(walk_len=walk_len, attention_set=attention,
+                    p = self.propagate_with_attention(walk_len=walk_len, attention_set=str(attention),
                                                       attention_type=attention_type)
                     feature_list.append(p)
         all_features_all_vertices = np.concatenate(feature_list, axis=1)
@@ -73,7 +73,7 @@ class GraphData:
                                  feature_index: int,
                                  threshold: float) -> List[List[int]]:
 
-        p = self.propagate_with_attention(walk_len=walk_len, attention_set=attention_set, attention_type=attention_type)
+        p = self.propagate_with_attention(walk_len=walk_len, attention_set=str(attention_set), attention_type=attention_type)
         col = p[:, feature_index]
         gt_attention = [i for i in attention_set if (col[i] > threshold)]
         lte_attention = [i for i in attention_set if (col[i] <= threshold)]
