@@ -28,6 +28,7 @@ class GTAGraph(BaseEstimator, RegressorMixin):
                  min_gain: float = 0.0,
                  min_leaf_size: int = 10,
                  attention_types: List[int] = [1, 2, 3, 4],
+                 attention_type_sample_probability: float = 0.5,
                  ):
         self.walk_lens = walk_lens
         self.max_attention_depth = max_attention_depth
@@ -41,6 +42,7 @@ class GTAGraph(BaseEstimator, RegressorMixin):
         self.train_total_gain = None
         self.tree_learner_root_ = None
         self.stats_dict = None
+        self.attention_type_sample_probability = attention_type_sample_probability
 
     def get_params(self, deep=True):
         """
@@ -123,15 +125,19 @@ class GTAGraph(BaseEstimator, RegressorMixin):
             min_gain=self.min_gain,
             min_leaf_size=self.min_leaf_size,
             attention_types=self.attention_types,
+            attention_type_sample_probability=self.attention_type_sample_probability,
         )
-        self.tree_learner_root_ = TreeNodeLearner(params=params, active=list(range(0, len(X))), parent=None)
+        self.tree_learner_root_ = TreeNodeLearner(params=params, active=list(range(0, len(X))), parent=None)  # root
         self.train_L2, self.train_total_gain, self.stats_dict = self.tree_learner_root_.fit(X, y)
         self.trained_tree_root_ = self.tree_learner_root_.build_trained_tree_and_get_root()
         return self
 
     def predict(self, X: List[GraphData]):
         if isinstance(X, np.ndarray):
-            X = X[0, :].tolist()
+            if len(X.shape) == 2:
+                X = X[0, :].tolist()
+            elif len(X.shape) == 1:
+                X = X.tolist()
         predictions = [self.trained_tree_root_.predict(x)[0] for x in X]
         array = np.array(predictions)
         if array.ndim == 1:
@@ -139,7 +145,7 @@ class GTAGraph(BaseEstimator, RegressorMixin):
         array.reshape(-1, 1)
         return array
 
-    def nodes_scores(self, g: GraphData):
+    def nodes_scores(self, g: GraphData):  # CURRENTLY USING HISTOGRAM COUNT INSTEAD OF SORTED RANKS
 
         num_of_nodes = g.get_number_of_nodes()
         pred = self.trained_tree_root_.predict(g)
@@ -151,5 +157,5 @@ class GTAGraph(BaseEstimator, RegressorMixin):
             nodes_scores[i] = (2.0 ** -(rank_ties[i])) * np.abs(pred_val)
         return np.array(nodes_scores)
 
-    def print(self):
+    def print_tree(self):
         self.trained_tree_root_.print_tree()

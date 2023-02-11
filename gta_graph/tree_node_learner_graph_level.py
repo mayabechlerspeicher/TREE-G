@@ -14,6 +14,7 @@ class TreeNodeLearnerParams(NamedTuple):
     min_leaf_size: int = 10,
     min_gain: float = 0.0,
     attention_types: List[int] = [1, 2, 3, 4],
+    attention_type_sample_probability: float = 0.5
 
 
 class TreeNodeLearner:
@@ -51,23 +52,6 @@ class TreeNodeLearner:
 
         self.stats_dict = None
 
-    @staticmethod
-    def get_index(latent_feature_index: int, sizes: List[int]) -> List[int]:
-        """
-        Translate the chosen index of the latent feature vector for each example to the chosen walk len, attention_depth, feature and aggregator
-        :param latent_feature_index: the chosen "latent feature" index
-        :param sizes: #walks_lens, #available_attetnions, # attention_types, #aggregators, #features
-        :return: a list with the sizes in the following order:  walk_len, attention index in available attentions, attention_type_index, aggregator index, feature index
-        """
-
-        indices = []
-        for n in range(0, len(sizes)):
-            s = sizes[len(sizes) - 1 - n]
-            i = latent_feature_index % s
-            latent_feature_index = int((latent_feature_index - i) / s)
-            indices.insert(0, i)
-        return indices
-
     def get_available_attentions_indices(self):
         """
         This function translate the available attention sets to their indices in the following order:
@@ -77,13 +61,13 @@ class TreeNodeLearner:
         :return: the set of indices of the available attention sets.
         """
 
-        attention_indices = [(0, -1)]
+        attention_indices = [(0, -1)]  # the set of all vertices
         p = self
         for i in range(0, self.params.max_attention_depth):
             if p.parent is None:
                 break
             p = p.parent
-            att = [(i, j) for j in range(0, len(p.generated_attentions[0]))]
+            att = [(i, j) for j in range(1, len(p.generated_attentions[0]) + 1)]
             attention_indices += att
         return attention_indices
 
@@ -115,8 +99,8 @@ class TreeNodeLearner:
                                                                     aggregators=self.params.aggregators,
                                                                     attention_types=self.params.attention_types)
             latent_feature_vectors.append(latent_feature_vector)
-        data = np.array(latent_feature_vectors)
-        stump = DecisionTreeRegressor(max_depth=1)
+        data = np.vstack(latent_feature_vectors)
+        stump = DecisionTreeRegressor(max_depth=1, random_state=42)
         stump.fit(data, labels)
         if len(stump.tree_.value) < 3:
             return 0
@@ -136,13 +120,54 @@ class TreeNodeLearner:
                               stump.tree_.value[0][0][0]
         return self.potential_gain
 
+    def sample_attention_types(self):
+        attention_types = []
+        for i in range(1, 5):
+            s = np.random.binomial(1, self.params.attention_type_sample_probability)
+            if s:
+                attention_types.append(i)
+        return attention_types
+
     def apply_best_split(self, X: List[GraphData], y: np.array):
-        lte_node = TreeNodeLearner(params=self.params,
+        lte_sampled_atttention_types = self.sample_attention_types()
+        if lte_sampled_atttention_types == []:
+            lte_sampled_atttention_types = [1]
+            lte_max_attention_depth = 0
+        else:
+            lte_max_attention_depth = self.params.max_attention_depth
+        lte_new_params = TreeNodeLearnerParams(
+            walk_lens=self.params.walk_lens,
+            max_attention_depth=lte_max_attention_depth,
+            aggregators=self.params.aggregators,
+            max_number_of_leafs=self.params.max_number_of_leafs,
+            min_gain=self.params.min_gain,
+            min_leaf_size=self.params.min_leaf_size,
+            attention_types=lte_sampled_atttention_types,
+            attention_type_sample_probability=self.params.attention_type_sample_probability
+        )
+        lte_node = TreeNodeLearner(params=lte_new_params,
                                    active=self.active_lte_,
                                    parent=self)
         lte_node.value_as_leaf = np.mean(y[self.active_lte_])
 
-        gt_node = TreeNodeLearner(params=self.params,
+        gt_sampled_atttention_types = self.sample_attention_types()
+        if gt_sampled_atttention_types == []:
+            gt_sampled_atttention_types = [1]
+            gt_max_attention_depth = 0
+        else:
+            gt_max_attention_depth = self.params.max_attention_depth
+        gt_new_params = TreeNodeLearnerParams(
+            walk_lens=self.params.walk_lens,
+            max_attention_depth=gt_max_attention_depth,
+            aggregators=self.params.aggregators,
+            max_number_of_leafs=self.params.max_number_of_leafs,
+            min_gain=self.params.min_gain,
+            min_leaf_size=self.params.min_leaf_size,
+            attention_types=gt_sampled_atttention_types,
+            attention_type_sample_probability=self.params.attention_type_sample_probability
+        )
+
+        gt_node = TreeNodeLearner(params=gt_new_params,
                                   active=self.active_gt_,
                                   parent=self)
         gt_node.value_as_leaf = np.mean(y[self.active_gt_])
@@ -167,6 +192,7 @@ class TreeNodeLearner:
         self.generated_attentions = [[] for _ in range(0, len(X))]
         for i in self.active:
             g = X[i]
+
             _, generated_attentions, _ = g.get_score_and_generated_attentions(walk_len=self.walk_len,
                                                                               attention_set=
                                                                               self.available_attentions[i][
@@ -179,10 +205,11 @@ class TreeNodeLearner:
 
             self.generated_attentions[i] = generated_attentions
 
-        return self.attention_depth, self.walk_len, self.aggregator, self.feature_index
+        return self.attention_depth, self.walk_len, self.aggregator, self.feature_index, self.attention_type
 
     def init_stats_dict(self):
-        stats_dict = {'attention_depth': {}, 'walk_len': {}, 'aggregator': {}, 'feature_index': {}}
+        stats_dict = {'attention_depth': {}, 'walk_len': {}, 'aggregator': {}, 'feature_index': {},
+                      'attention_type': {}}
         for attention in range(self.params.max_attention_depth + 1):
             stats_dict['attention_depth'][attention] = 0
         for walk_len in self.params.walk_lens:
@@ -191,15 +218,18 @@ class TreeNodeLearner:
             stats_dict['aggregator'][aggregator.get_name()] = 0
         for feature in range(self.features_dimension):
             stats_dict['feature_index'][feature] = 0
+        for attention_type in [1, 2, 3, 4]:
+            stats_dict['attention_type'][attention_type] = 0
 
         return stats_dict
 
-    def update_stats_dict(self, stats_dict, attention_depth, walk_len, aggregator, feature_index):
+    def update_stats_dict(self, stats_dict, attention_depth, walk_len, aggregator, feature_index, attention_type):
 
         stats_dict['attention_depth'][attention_depth] += 1
         stats_dict['walk_len'][walk_len] += 1
         stats_dict['aggregator'][aggregator.get_name()] += 1
         stats_dict['feature_index'][feature_index] += 1
+        stats_dict['attention_type'][attention_type] += 1
 
     def fit(self, X: List[GraphData], y: np.array):
         self.features_dimension = X[0].get_number_of_features()
@@ -214,12 +244,15 @@ class TreeNodeLearner:
         for _ in range(1, self.params.max_number_of_leafs):
             index_max = np.argmax(potential_gains)
             gain = potential_gains[index_max]
+
             if gain < min_gain:
                 break
             leaf_to_split = leafs.pop(index_max)
             potential_gains.pop(index_max)
-            attention_depth, walk_len, aggregator, feature_index = leaf_to_split.apply_best_split(X, y)
-            self.update_stats_dict(stats_dict, attention_depth, walk_len, aggregator, feature_index)
+            attention_depth, walk_len, aggregator, feature_index, attention_type = leaf_to_split.apply_best_split(X, y)
+            self.update_stats_dict(stats_dict=stats_dict, attention_depth=attention_depth, walk_len=walk_len,
+                                   aggregator=aggregator,
+                                   feature_index=feature_index, attention_type=attention_type)
             lte = leaf_to_split.lte
             gt = leaf_to_split.gt
             potential_gains += [lte.find_best_split(X, y), gt.find_best_split(X, y)]
@@ -227,7 +260,6 @@ class TreeNodeLearner:
             total_gain += gain
 
         self.stats_dict = stats_dict
-
         L2 = 0
         for leaf in leafs:
             labels = y[leaf.active]
@@ -261,6 +293,23 @@ class TreeNodeLearner:
                 p = p.gt
         return p.value_as_leaf, histogram
 
+    @staticmethod
+    def get_index(latent_feature_index: int, sizes: List[int]) -> List[int]:
+        """
+        Translate the chosen index of the latent feature vector for each example to the chosen walk len, attention_depth, feature and aggregator
+        :param latent_feature_index: the chosen "latent feature" index
+        :param sizes: #walks_lens, #available_attetnions, # attention_types, #aggregators, #features
+        :return: a list with the sizes in the following order:  walk_len, attention index in available attentions, attention_type_index, aggregator index, feature index
+        """
+
+        indices = []
+        for n in range(0, len(sizes)):
+            s = sizes[len(sizes) - 1 - n]
+            i = latent_feature_index % s
+            latent_feature_index = int((latent_feature_index - i) / s)
+            indices.insert(0, i)
+        return indices
+
     def build_trained_tree_and_get_root(self):
         if self.gt is None:
             self.trained_tree_node = TrainedTreeNode(gt=None, lte=None, feature_index=-1, thresh=0,
@@ -268,7 +317,8 @@ class TreeNodeLearner:
                                                      active_attention_index=-1,
                                                      max_attention_depth=self.params.max_attention_depth,
                                                      aggregator=None,
-                                                     attention_type=self.attention_type)
+                                                     attention_type=self.attention_type,
+                                                     )
         else:
             self.trained_tree_node = TrainedTreeNode(gt=None, lte=None, feature_index=self.feature_index,
                                                      thresh=self.thresh_, value_as_leaf=self.value_as_leaf,
@@ -282,12 +332,3 @@ class TreeNodeLearner:
             self.trained_tree_node.gt = self.gt.build_trained_tree_and_get_root()
 
         return self.trained_tree_node
-
-    def print_tree(self, indent=""):
-        if self.gt is None:
-            print(indent, "-->", self.value_as_leaf)
-        else:
-            print(indent, "f%d _thresh %3f depth %2d aggregator %5s" % (
-                self.feature_index, self.thresh_, self.walk_len, self.aggregator.get_name()))
-            self.lte.print_tree(indent + "  ")
-            self.gt.print_tree(indent + "  ")

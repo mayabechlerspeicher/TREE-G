@@ -26,11 +26,11 @@ class GTANode(BaseEstimator, RegressorMixin):
                  min_gain: float = 0.0,
                  min_leaf_size: int = 10,
                  attention_types: List[int] = [1, 4],
+                 attention_type_sample_probability: float = 0.5,
                  ):
         self.train_total_gain = None
         self.train_L2 = None
-        self.trained_tree_ = None  # root
-        self.tree_learner_ = None
+        self.trained_tree_ = None
         self.tree_learner = None
         self.walk_lens = walk_lens
         self.max_attention_depth = max_attention_depth
@@ -39,6 +39,7 @@ class GTANode(BaseEstimator, RegressorMixin):
         self.min_leaf_size = min_leaf_size
         self.graph = graph
         self.attention_types = attention_types
+        self.attention_type_sample_probability = attention_type_sample_probability
 
     def get_params(self, deep=True):
         """
@@ -79,7 +80,6 @@ class GTANode(BaseEstimator, RegressorMixin):
             Estimator instance.
         """
         if not params:
-
             return self
         valid_params = self.get_params(deep=True)
 
@@ -106,32 +106,29 @@ class GTANode(BaseEstimator, RegressorMixin):
 
     def fit(self, X: np.array, y: np.array):
         X = X.flatten()
-        y = y.flatten()
-        if len(X) != len(y):
-            raise ValueError("Size of X and y mismatch")
-
         self.graph.compute_walks(self.walk_lens[-1])
 
         params = TreeNodeLearnerParams(
-            walks_lens=self.walk_lens,
+            walk_lens=self.walk_lens,
             max_attention_depth=self.max_attention_depth,
             max_number_of_leafs=self.max_number_of_leafs,
             min_gain=self.min_gain,
             min_leaf_size=self.min_leaf_size,
             graph=self.graph,
-            attention_types=self.attention_types
+            attention_types=self.attention_types,
+            attention_type_sample_probability=self.attention_type_sample_probability,
         )
-        self.tree_learner_ = TreeNodeLearner(params=params, active=list(range(0, self.graph.get_number_of_nodes())),
-                                             parent=None)
-        self.train_L2, self.train_total_gain = self.tree_learner_.fit(X, y)
+        self.tree_learner = TreeNodeLearner(params=params, active=np.array(X),
+                                            parent=None)
+        self.train_L2, self.train_total_gain = self.tree_learner.fit(X, y)
         return self
 
     def predict(self, X: List[int]):
-        all_predictions = self.tree_learner_.predict_all()
+        all_predictions = self.tree_learner.predict_all()
         if isinstance(X, np.ndarray):
             X = X[0].tolist()
         array = np.array(all_predictions[X])
         return array.reshape(-1, 1)
 
-    def print(self):
+    def print_tree(self):
         self.tree_learner.print_tree()

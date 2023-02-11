@@ -8,6 +8,7 @@ from typing import List
 class GTA(BaseEstimator, RegressorMixin):
     def __init__(self,
                  classifier: bool = True,
+                 gain_criterion: str = 'entropy',
                  max_attention: int = 1,
                  max_walk_len: int = 1,
                  min_leaf_size: int = 10,
@@ -15,9 +16,11 @@ class GTA(BaseEstimator, RegressorMixin):
                  max_number_of_leafs: int = 10,
                  min_gain: float = 0.0,
                  attention_types: List[int] = [1, 4],
-                 is_graph_task: bool = True):
+                 is_graph_task: bool = True,
+                 attention_type_sample_probability: float = 0.5,):
 
         self.classifier = classifier
+        self.gain_criterion = gain_criterion
         self.max_attention = max_attention
         self.max_walk_len = max_walk_len
         self.min_leaf_size = min_leaf_size
@@ -25,21 +28,19 @@ class GTA(BaseEstimator, RegressorMixin):
         self.max_number_of_leafs = max_number_of_leafs
         self.min_gain = min_gain
         self.is_graph_task = is_graph_task
+        self.attention_type_sample_probability = attention_type_sample_probability
 
         walk_lens = list(range(0, max_walk_len + 1))
         if is_graph_task:
-            self.model = GTAGraph(max_attention_depth=max_attention,
-                                  walk_lens=walk_lens,
+            self.model = GTAGraph(max_attention_depth=max_attention, walk_lens=walk_lens,
                                   min_leaf_size=min_leaf_size,
-                                  max_number_of_leafs=max_number_of_leafs,
-                                  attention_types=attention_types)
+                                  max_number_of_leafs=max_number_of_leafs, attention_types=attention_types,
+                                  attention_type_sample_probability=attention_type_sample_probability)
 
         else:
-            self.model = GTANode(max_attention_depth=max_attention,
-                                 walk_lens=walk_lens,
+            self.model = GTANode(max_attention_depth=max_attention, walk_lens=walk_lens,
                                  min_leaf_size=min_leaf_size,
-                                 max_number_of_leafs=max_number_of_leafs,
-                                 attention_types=attention_types)
+                                 max_number_of_leafs=max_number_of_leafs, attention_types=attention_types)
 
     def fit(self, X, y):
         return self.model.fit(X, y)

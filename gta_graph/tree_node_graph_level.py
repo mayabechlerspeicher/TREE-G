@@ -40,15 +40,16 @@ class TrainedTreeNode:
         self.feature_index = feature_index
         self.max_attention_depth = max_attention_depth
 
-    def print(self, indent=""):
+    def print_tree(self, indent=""):
         if self.gt is None:
             print(indent, "-->", self.value_as_leaf)
         else:
-            print(indent, "f%d _thresh %3f depth %2d function %5s att_ind %d" % (
+            print("in print_tree thresh: ",  self.thresh)
+            print(indent, "f%d _thresh %3f depth %2d function %5s att_ind %d " % (
                 self.feature_index, self.thresh, self.walk_len, self.aggregator.get_name(),
                 self.active_attention_index))
-            self.lte.print(indent + "  ")
-            self.gt.print(indent + "  ")
+            self.lte.print_tree(indent + "  ")
+            self.gt.print_tree(indent + "  ")
 
     def predict(self, g: GraphData):
         attentions_cache = [[list(range(0, g.get_number_of_nodes()))]]

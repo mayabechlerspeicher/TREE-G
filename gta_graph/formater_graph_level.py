@@ -33,6 +33,9 @@ def pyg_data_to_tree_graph_data(pyg_graph):
     list_of_edges = pyg_graph.edge_index.T.tolist()
     G.add_edges_from(list_of_edges)
     adj = nx.to_numpy_array(G)
+    is_undirected = np.allclose(adj, adj.T, rtol=1e-05, atol=1e-08)
+    if not is_undirected:
+        adj = adj.T
     if pyg_graph.x is None:
         nodes_features = np.array([G.degree(i) for i in range(num_nodes)]) \
             .reshape(num_nodes, 1)
@@ -50,6 +53,9 @@ def pyg_data_to_sparse_graph_data(pyg_graph):
     list_of_edges = pyg_graph.edge_index.T.tolist()
     G.add_edges_from(list_of_edges)
     adj = nx.to_numpy_array(G)
+    is_undirected = np.allclose(adj, adj.T, rtol=1e-05, atol=1e-08)
+    if not is_undirected:
+        adj = adj.T
     if pyg_graph.x is None:
         nodes_features = np.array([G.degree(i) for i in range(num_nodes)]) \
             .reshape(num_nodes, 1)

@@ -1,5 +1,6 @@
 from functools import lru_cache
 import numpy as np
+from numpy.linalg import matrix_power
 from typing import List
 from gta_graph.aggregator_graph_level import Aggregator
 from scipy import sparse
@@ -46,9 +47,11 @@ class GraphData:
         if attention_type == 1:
             masked_ad = np.zeros_like(self.adj_mat)
             masked_ad[:, attention_set] = self.adj_powers[walk_len][:, attention_set]
-            return np.matmul(masked_ad, self.features)[attention_set, :]
+            return np.matmul(masked_ad, self.features)
         elif attention_type == 2:
-            return np.matmul(self.adj_powers[walk_len], self.features)[attention_set, :]
+            masked_ad = np.zeros_like(self.adj_mat)
+            masked_ad[attention_set, :] = self.adj_powers[walk_len][attention_set, :]
+            return np.matmul(masked_ad, self.features)[attention_set, :]
         elif attention_type == 3:
             masked_ad = np.zeros_like(self.adj_mat)
             masked_ad[:, attention_set] = self.adj_powers[walk_len][:, attention_set]
@@ -63,7 +66,6 @@ class GraphData:
         else:
             print('Invalid attention type ' + str(attention_type) + '. Valid attentions for graph-level tasks are 1-5')
             return None
-
 
     def get_latent_feature_vector(self, walk_lens: List[int],
                                   available_attentions: List[np.array],
@@ -98,8 +100,6 @@ class GraphData:
             cola = pa[:, feature_index]
         return agg.get_score(cola), agg.get_generated_attentions(cola, thresh), attention_set
 
-
-
     def get_label(self):
         return self.label
 
@@ -130,7 +130,7 @@ class SparseGraphData(GraphData):
             for i in not_in_attention:
                 masked_sparse_power[:, i] = 0
             propagated_features = masked_sparse_power * self.sparse_features
-            return propagated_features.toarray()[attention_set, :]
+            return propagated_features.toarray()
         elif attention_type == 2:
             masked_sparse_power = self.sparse_adj_powers[walk_len].tolil()
             for i in not_in_attention:
@@ -154,7 +154,6 @@ class SparseGraphData(GraphData):
         else:
             print('Invalid attention type ' + str(attention_type) + '. Valid attentions for graph-level tasks are 1-5')
             return None
-
 
     def get_number_of_nodes(self):
         return self._num_nodes
