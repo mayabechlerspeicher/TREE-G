@@ -1,9 +1,11 @@
-from gta_node.tree_node_learner_node_level import TreeNodeLearner, TreeNodeLearnerParams
-from gta_node.graph_data_node_level import GraphData
+from treeg.graph_treeg.tree_node_learner_graph_level import TreeNodeLearner, TreeNodeLearnerParams
+from treeg.graph_treeg.aggregator_graph_level import Aggregator, graph_level_aggregators
+from treeg.graph_treeg.graph_data_graph_level import GraphData
 from typing import List
 import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 from collections import defaultdict
+from scipy.stats import rankdata
 
 
 ################################################################
@@ -17,28 +19,29 @@ from collections import defaultdict
 ###                                                          ###
 ################################################################
 
-class GTANode(BaseEstimator, RegressorMixin):
+class GraphTreeG(BaseEstimator, RegressorMixin):
     def __init__(self,
-                 graph: GraphData = None,
                  walk_lens: List[int] = [0, 1, 2],
                  max_attention_depth: int = 2,
+                 aggregators: List[Aggregator] = graph_level_aggregators,
                  max_number_of_leafs: int = 10,
                  min_gain: float = 0.0,
                  min_leaf_size: int = 10,
-                 attention_types: List[int] = [1, 4],
+                 attention_types: List[int] = [1, 2, 3, 4],
                  attention_type_sample_probability: float = 0.5,
                  ):
-        self.train_total_gain = None
-        self.train_L2 = None
-        self.trained_tree_ = None
-        self.tree_learner = None
         self.walk_lens = walk_lens
         self.max_attention_depth = max_attention_depth
+        self.aggregators = aggregators
         self.max_number_of_leafs = max_number_of_leafs
         self.min_gain = min_gain
         self.min_leaf_size = min_leaf_size
-        self.graph = graph
         self.attention_types = attention_types
+        self.trained_tree_root_ = None
+        self.train_L2 = None
+        self.train_total_gain = None
+        self.tree_learner_root_ = None
+        self.stats_dict = None
         self.attention_type_sample_probability = attention_type_sample_probability
 
     def get_params(self, deep=True):
@@ -104,31 +107,55 @@ class GTANode(BaseEstimator, RegressorMixin):
 
         return self
 
-    def fit(self, X: np.array, y: np.array):
-        X = X.flatten()
-        self.graph.compute_walks(self.walk_lens[-1])
+    def fit(self, X: List[GraphData], y: np.array, sample_weight=None):
+        if isinstance(X, np.ndarray):
+            X = X[0, :].tolist()
+
+        if len(X) != len(y):
+            raise ValueError("Size of X and y mismatch")
+
+        for graph in X:
+            graph.compute_walks(self.walk_lens[-1])
 
         params = TreeNodeLearnerParams(
             walk_lens=self.walk_lens,
             max_attention_depth=self.max_attention_depth,
+            aggregators=self.aggregators,
             max_number_of_leafs=self.max_number_of_leafs,
             min_gain=self.min_gain,
             min_leaf_size=self.min_leaf_size,
-            graph=self.graph,
             attention_types=self.attention_types,
             attention_type_sample_probability=self.attention_type_sample_probability,
         )
-        self.tree_learner = TreeNodeLearner(params=params, active=np.array(X),
-                                            parent=None)
-        self.train_L2, self.train_total_gain = self.tree_learner.fit(X, y)
+        self.tree_learner_root_ = TreeNodeLearner(params=params, active=list(range(0, len(X))), parent=None)  # root
+        self.train_L2, self.train_total_gain, self.stats_dict = self.tree_learner_root_.fit(X, y)
+        self.trained_tree_root_ = self.tree_learner_root_.build_trained_tree_and_get_root()
         return self
 
-    def predict(self, X: List[int]):
-        all_predictions = self.tree_learner.predict_all()
+    def predict(self, X: List[GraphData]):
         if isinstance(X, np.ndarray):
-            X = X[0].tolist()
-        array = np.array(all_predictions[X])
-        return array.reshape(-1, 1)
+            if len(X.shape) == 2:
+                X = X[0, :].tolist()
+            elif len(X.shape) == 1:
+                X = X.tolist()
+        predictions = [self.trained_tree_root_.predict(x)[0] for x in X]
+        array = np.array(predictions)
+        if array.ndim == 1:
+            array = array.reshape(-1, 1)
+        array.reshape(-1, 1)
+        return array
+
+    def nodes_scores(self, g: GraphData):  # CURRENTLY USING HISTOGRAM COUNT INSTEAD OF SORTED RANKS
+
+        num_of_nodes = g.get_number_of_nodes()
+        pred = self.trained_tree_root_.predict(g)
+        pred_val = pred[0]
+        histogram = pred[1]
+        rank_ties = rankdata(histogram) * 10
+        nodes_scores = np.zeros(num_of_nodes)
+        for i in range(num_of_nodes):
+            nodes_scores[i] = (2.0 ** -(rank_ties[i])) * np.abs(pred_val)
+        return np.array(nodes_scores)
 
     def print_tree(self):
-        self.tree_learner.print_tree()
+        self.trained_tree_root_.print_tree()

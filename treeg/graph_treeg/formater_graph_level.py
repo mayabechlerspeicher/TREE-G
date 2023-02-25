@@ -2,7 +2,7 @@ import networkx as nx
 import torch
 import numpy as np
 from torch_geometric.data import Data
-from gta_graph.graph_data_graph_level import GraphData, SparseGraphData
+from treeg.graph_treeg.graph_data_graph_level import GraphData, SparseGraphData
 
 
 def adj_to_edges_list(adj_mat):

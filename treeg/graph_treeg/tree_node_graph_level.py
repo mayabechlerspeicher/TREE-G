@@ -1,6 +1,6 @@
 import numpy as np
-from gta_graph.aggregator_graph_level import Aggregator
-from gta_graph.graph_data_graph_level import GraphData
+from treeg.graph_treeg.aggregator_graph_level import Aggregator
+from treeg.graph_treeg.graph_data_graph_level import GraphData
 
 
 class TrainedTreeNode:

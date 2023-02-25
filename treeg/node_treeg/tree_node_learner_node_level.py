@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List, NamedTuple, Dict
-from gta_node.graph_data_node_level import GraphData
+from treeg.node_treeg.graph_data_node_level import GraphData
 from sklearn.tree import DecisionTreeRegressor
 
 def intersect(lst1: List[int], lst2: List[int]):
@@ -115,7 +115,6 @@ class TreeNodeLearner:
     def get_set_attention_cache_index(self, attention_set):
         attention_set_str = str(attention_set)
         if attention_set_str in self.attention_sets_cache_map:
-            print("using cach!!")
             return self.attention_sets_cache_map[attention_set_str]
         else:
             index = len(self.attention_sets_cache)

@@ -1,14 +1,15 @@
 import numpy as np
 from sklearn.metrics import mean_squared_error, accuracy_score
-from gta_graph.gta_graph_level import GTAGraph
+from treeg.graph_treeg.graph_level_treeg import GraphTreeG
 from starboost import BoostingClassifier, BoostingRegressor
 from sklearn.metrics import roc_auc_score
 import wandb
-from data_formatter import DataFormatter
-import gta_graph.explainer_graph_level as explainer_graph_level
-from gta_graph.aggregator_graph_level import graph_level_aggregators
-import data_utils
-from graph_data_graph_level import GraphData
+from data_utils import add_constant_one_feature
+from treeg.graph_treeg.data_formetter_graph_level import DataFormatter
+from treeg import graph_treeg as explainer_graph_level
+from treeg.graph_treeg.aggregator_graph_level import graph_level_aggregators
+from treeg.graph_treeg.graph_data_graph_level import GraphData, SparseGraphData
+from sklearn.model_selection import KFold
 import threading
 
 wandb_flag = False
@@ -16,20 +17,7 @@ n_estimators = 50
 learning_rate = 0.1
 attention_type_sample_probability = 0.25
 
-
-def print_trees(model):
-    for idx, estimator in enumerate(model.estimators_):
-        print('Tree ' + str(idx) + ':')
-        estimator[0].print_tree()
-
-
-def add_constant_one_feature(Xs):
-    for x in Xs:
-        ones_vec = np.ones(shape=(x.get_number_of_nodes(), 1))
-        x.features = np.append(x.features, ones_vec, axis=1)
-
-
-def test(model, X, y):
+def calc_metrics(model, X, y):
     y_preds = model.predict(X).flatten()
     l2 = mean_squared_error(y, y_preds)
     num_of_classes = len(np.unique(y))
@@ -41,16 +29,39 @@ def test(model, X, y):
     return l2, auc, acc
 
 
+def train(X_train, y_train, max_attention_depth, max_graph_depth, attention_types, classification=True):
+    boosting_model = BoostingClassifier if classification else BoostingRegressor
+    gbgta = boosting_model(
+        init_estimator=GraphTreeG(
+            max_attention_depth=max_attention_depth,
+            walk_lens=list(range(0, max_graph_depth + 1)),
+            attention_types=attention_types,
+            attention_type_sample_probability=attention_type_sample_probability),
+        base_estimator=GraphTreeG(
+            max_attention_depth=max_attention_depth,
+            walk_lens=list(range(0, max_graph_depth + 1)),
+            attention_types=attention_types,
+            attention_type_sample_probability=attention_type_sample_probability
+        ),
+        n_estimators=n_estimators,
+        learning_rate=learning_rate)
+    y = np.array(y_train)
+    y = y.flatten()
+    gbgta.fit(X_train, y)
+    return gbgta
+
+
+
 def train_test(X_train, y_train, X_test, y_test, max_attention_depth, max_graph_depth, attention_types,
                classification=True):
     boosting_model = BoostingClassifier if classification else BoostingRegressor
     gbgta = boosting_model(
-        init_estimator=GTAGraph(max_attention_depth=max_attention_depth,
-                                walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
-                                attention_type_sample_probability=attention_type_sample_probability),
-        base_estimator=GTAGraph(max_attention_depth=max_attention_depth,
-                                walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
-                                attention_type_sample_probability=attention_type_sample_probability),
+        init_estimator=GraphTreeG(max_attention_depth=max_attention_depth,
+                                  walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
+                                  attention_type_sample_probability=attention_type_sample_probability),
+        base_estimator=GraphTreeG(max_attention_depth=max_attention_depth,
+                                  walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
+                                  attention_type_sample_probability=attention_type_sample_probability),
         n_estimators=n_estimators,
         learning_rate=learning_rate)
 
@@ -58,9 +69,9 @@ def train_test(X_train, y_train, X_test, y_test, max_attention_depth, max_graph_
     y = y.flatten()
     gbgta.fit(X_train, y)
 
-    L2_train, auc_train, acc_train = test(gbgta, X_train, y_train)
+    L2_train, auc_train, acc_train = calc_metrics(gbgta, X_train, y_train)
     print("Train: l2 %5f accuracy %5f auc %5f" % (L2_train, acc_train, auc_train))
-    L2_test, auc_test, acc_test = test(gbgta, X_test, y_test)
+    L2_test, auc_test, acc_test = calc_metrics(gbgta, X_test, y_test)
     print("Test: l2 %5f accuracy %5f auc %5f" % (L2_test, acc_test, auc_test))
 
     if wandb_flag:
@@ -77,39 +88,17 @@ def train_test(X_train, y_train, X_test, y_test, max_attention_depth, max_graph_
     return gbgta, stats_dict, L2_train, auc_train, acc_train, L2_test, auc_test, acc_test
 
 
-def train(X_train, y_train, max_attention_depth, max_graph_depth, attention_types, classification=True):
-    boosting_model = BoostingClassifier if classification else BoostingRegressor
-    gbgta = boosting_model(
-        init_estimator=GTAGraph(
-            max_attention_depth=max_attention_depth,
-            walk_lens=list(range(0, max_graph_depth + 1)),
-            attention_types=attention_types,
-            attention_type_sample_probability=attention_type_sample_probability),
-        base_estimator=GTAGraph(
-            max_attention_depth=max_attention_depth,
-            walk_lens=list(range(0, max_graph_depth + 1)),
-            attention_types=attention_types,
-            attention_type_sample_probability=attention_type_sample_probability
-        ),
-        n_estimators=n_estimators,
-        learning_rate=learning_rate)
-    y = np.array(y_train)
-    y = y.flatten()
-    gbgta.fit(X_train, y)
-    return gbgta
-
-
 def train_val_test(X_train, y_train, X_val, y_val, X_test, y_test, max_attention_depth, max_graph_depth,
                    attention_types,
                    classification=True):
     boosting_model = BoostingClassifier if classification else BoostingRegressor
     gbgta = boosting_model(
-        init_estimator=GTAGraph(max_attention_depth=max_attention_depth,
-                                walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
-                                attention_type_sample_probability=attention_type_sample_probability),
-        base_estimator=GTAGraph(max_attention_depth=max_attention_depth,
-                                walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
-                                attention_type_sample_probability=attention_type_sample_probability),
+        init_estimator=GraphTreeG(max_attention_depth=max_attention_depth,
+                                  walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
+                                  attention_type_sample_probability=attention_type_sample_probability),
+        base_estimator=GraphTreeG(max_attention_depth=max_attention_depth,
+                                  walk_lens=list(range(0, max_graph_depth + 1)), attention_types=attention_types,
+                                  attention_type_sample_probability=attention_type_sample_probability),
         n_estimators=n_estimators,
         learning_rate=learning_rate)
 
@@ -121,11 +110,11 @@ def train_val_test(X_train, y_train, X_val, y_val, X_test, y_test, max_attention
     X_test = X_test.flatten().tolist()
     gbgta.fit(X_train, y)
 
-    L2_train, auc_train, acc_train = test(gbgta, X_train, y_train)
+    L2_train, auc_train, acc_train = calc_metrics(gbgta, X_train, y_train)
     print("Train: l2 %5f accuracy %5f auc %5f" % (L2_train, acc_train, auc_train))
-    L2_val, auc_val, acc_val = test(gbgta, X_val, y_val)
+    L2_val, auc_val, acc_val = calc_metrics(gbgta, X_val, y_val)
     print("Val: l2 %5f accuracy %5f auc %5f" % (L2_val, acc_val, auc_val))
-    L2_test, auc_test, acc_test = test(gbgta, X_test, y_test)
+    L2_test, auc_test, acc_test = calc_metrics(gbgta, X_test, y_test)
     print("Test: l2 %5f accuracy %5f auc %5f" % (L2_test, acc_test, auc_test))
 
     if wandb_flag:
@@ -141,21 +130,19 @@ def train_val_test(X_train, y_train, X_val, y_val, X_test, y_test, max_attention
         wandb.log({"auc_val": auc_val})
         wandb.log({"acc_val": acc_val})
 
-    stats_dict = explainer_graph_level.sum_stats_from_all_trees(gbgta)
-
     return gbgta, stats_dict
 
 
-def train_multiclass_paralel(X_train, y_train, X_test, max_attention_depth, max_graph_depth, attention_types, class_idx,
-                             results_arr, classification=True):
+def train_test_multiclass_parallel(X_train, y_train, X_test, max_attention_depth, max_graph_depth, attention_types, class_idx,
+                                   results_arr, classification=True):
     boosting_model = BoostingClassifier if classification else BoostingRegressor
     gbgta = boosting_model(
-        init_estimator=GTAGraph(
+        init_estimator=GraphTreeG(
             max_attention_depth=max_attention_depth,
             walk_lens=list(range(0, max_graph_depth + 1)),
             attention_types=attention_types,
             attention_type_sample_probability=attention_type_sample_probability),
-        base_estimator=GTAGraph(
+        base_estimator=GraphTreeG(
             max_attention_depth=max_attention_depth,
             walk_lens=list(range(0, max_graph_depth + 1)),
             attention_types=attention_types,
@@ -171,16 +158,21 @@ def train_multiclass_paralel(X_train, y_train, X_test, max_attention_depth, max_
     results_arr[:, class_idx] = test_preds
 
 
-def run_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
+def cross_validation(dataset, with_constant_one_feature=True):
     num_folds = 10
     max_attention_depths = [2]
-    max_graph_depths = [2]
+    max_walk_lengths = [2]
     attention_types = [1, 2, 3, 4]
 
+    formatter = DataFormatter(GraphData)
+    X, y = formatter.pyg_data_list_to_tree_graph_data_list(dataset)
+    X, y = np.array(X), np.array(y)
+
+    kf = KFold(n_splits=num_folds)
     for max_attention_depth in max_attention_depths:
-        for max_graph_depth in max_graph_depths:
-            print('running dataset: ' + dataset_name + ' max_attention_depth: ' + str(
-                max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth))
+        for max_walk_len in max_walk_lengths:
+            print('Running dataset: ' + dataset.name + ' max_attention_depth: ' + str(
+                max_attention_depth) + ' max_walk_length: ' + str(max_walk_len))
             all_auc_train = []
             all_auc_test = []
             all_acc_train = []
@@ -191,7 +183,7 @@ def run_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
                            # settings=wandb.Settings(start_method='thread'),
                            config={
                                "max_attention": max_attention_depth,
-                               "max_graph_depth": max_graph_depth,
+                               "max_graph_depth": max_walk_len,
                                "num_folds": num_folds,
                                "n_estimators": n_estimators,
                                "learning_rate": learning_rate,
@@ -200,14 +192,14 @@ def run_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
                                'graph_level_aggregators': str([agg.name for agg in graph_level_aggregators]),
                                'attention_type_sample_probability': attention_type_sample_probability,
                            })
-                run_name = '%s_%d_%d' % (dataset_name, max_attention_depth, max_graph_depth)
+                run_name = '%s_%d_%d' % (dataset_name, max_attention_depth, max_walk_len)
                 wandb.run.name = run_name
             inferences_mean_time = []
-            for idx in range(1, num_folds + 1):
-                print('running dataset: ' + dataset_name + ' max_attention_depth: ' + str(
-                    max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth) + ' fold: ' + str(idx))
-                X_train, y_train = data_utils.load_split_processed_datasets(dataset_name, fold_idx=idx, is_train=True)
-                X_test, y_test = data_utils.load_split_processed_datasets(dataset_name, fold_idx=idx, is_train=False)
+            for idx, (train_index, test_index) in enumerate(kf.split(X)):
+                print('Running dataset: ' + dataset.name + ' max_attention_depth: ' + str(
+                    max_attention_depth) + ' max_walk_length: ' + str(max_walk_len) + ' fold: ' + str(idx))
+                X_train, y_train = list(X[train_index]), list(y[train_index])
+                X_test, y_test = list(X[test_index]), list(y[test_index])
                 if with_constant_one_feature:
                     add_constant_one_feature(X_train)
                     add_constant_one_feature(X_test)
@@ -219,12 +211,12 @@ def run_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
 
                 if X_train[0].adj_powers is not list:
                     for graph in X_train:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                     for graph in X_test:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
 
                 gbgta, stats_dict, L2_train, auc_train, acc_train, L2_test, auc_test, acc_test, total_inference_time = \
-                    train_test(X_train, y_train, X_test, y_test, max_attention_depth, max_graph_depth, attention_types,
+                    train_test(X_train, y_train, X_test, y_test, max_attention_depth, max_walk_len, attention_types,
                                classification=True)
                 total_inference_time_minutes = total_inference_time.total_seconds() / 60
                 inferences_mean_time.append(total_inference_time_minutes)
@@ -266,38 +258,43 @@ def run_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
                 wandb.finish()
 
 
-def run_paralel_multiclass_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
-    num_folds = 10
+def parallel_multiclass_cross_validation(dataset, with_constant_one_feature=True):
+    num_folds = 2
     max_attention_depths = [0, 1, 2]
-    max_graph_depths = [0, 1, 2]
+    max_walk_lengths = [0, 1, 2]
     attention_types = [1, 2, 3, 4]
 
+    formatter = DataFormatter(GraphData)
+    X, y = formatter.pyg_data_list_to_tree_graph_data_list(dataset)
+    X, y = np.array(X), np.array(y)
+
+    kf = KFold(n_splits=num_folds)
     for max_attention_depth in max_attention_depths:
-        for max_graph_depth in max_graph_depths:
-            print('running dataset: ' + dataset_name + ' max_attention_depth: ' + str(
-                max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth))
+        for max_walk_len in max_walk_lengths:
+            print('Running dataset: ' + dataset.name + ' max_attention_depth: ' + str(
+                max_attention_depth) + ' max_walk_length: ' + str(max_walk_len))
             all_acc_test = []
             if wandb_flag:
                 wandb.init(project='GTA_experiments', reinit=True, entity='your entity',
                            config={
                                "max_attention": max_attention_depth,
-                               "max_graph_depth": max_graph_depth,
+                               "max_graph_depth": max_walk_len,
                                "num_folds": num_folds,
                                "n_estimators": n_estimators,
                                "learning_rate": learning_rate,
-                               "dataset": dataset_name,
+                               "dataset": dataset.__name__,
                                "attention_types": str(attention_types),
                                'graph_level_aggregators': str([agg.name for agg in graph_level_aggregators]),
                                'attention_type_sample_probability': attention_type_sample_probability,
                            })
-                run_name = '%s_%d_%d' % (dataset_name, max_attention_depth, max_graph_depth)
+                run_name = '%s_%d_%d' % (dataset.name, max_attention_depth, max_walk_len)
                 wandb.run.name = run_name
 
-            for idx in range(1, num_folds + 1):
-                print('running dataset: ' + dataset_name + ' max_attention_depth: ' + str(
-                    max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth) + ' fold: ' + str(idx))
-                X_train, y_train = data_utils.load_split_processed_datasets(dataset_name, fold_idx=idx, is_train=True)
-                X_test, y_test = data_utils.load_split_processed_datasets(dataset_name, fold_idx=idx, is_train=False)
+            for idx, (train_index, test_index) in enumerate(kf.split(X)):
+                print('Running dataset: ' + dataset.name + ' max_attention_depth: ' + str(
+                    max_attention_depth) + ' max_walk_len: ' + str(max_walk_len) + ' fold: ' + str(idx))
+                X_train, y_train = list(X[train_index]), list(y[train_index])
+                X_test, y_test = list(X[test_index]), list(y[test_index])
                 num_of_classes = np.max([2, np.max(y_test) + 1])
                 threads = []
                 if with_constant_one_feature:
@@ -311,17 +308,17 @@ def run_paralel_multiclass_cross_val_fixed_splits(dataset_name, with_constant_on
 
                 if X_train[0].adj_powers is not list:
                     for graph in X_train:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                     for graph in X_test:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                 test_preds_all_classes = np.zeros(shape=(len(y_test), num_of_classes))
                 for class_i in range(num_of_classes):
                     X_train_class = X_train
                     X_test_class = X_test
                     y_train_class = (np.array(y_train) == class_i).astype(int)
 
-                    thread = threading.Thread(target=train_multiclass_paralel, args=(
-                        X_train_class, y_train_class, X_test_class, max_attention_depth, max_graph_depth,
+                    thread = threading.Thread(target=train_test_multiclass_parallel, args=(
+                        X_train_class, y_train_class, X_test_class, max_attention_depth, max_walk_len,
                         attention_types, class_i, test_preds_all_classes, True))
                     threads.append(thread)
                     thread.start()
@@ -337,46 +334,52 @@ def run_paralel_multiclass_cross_val_fixed_splits(dataset_name, with_constant_on
                 if wandb_flag:
                     wandb.log({'fold %d acc test' % idx: acc_test})
 
-            print('acc-std-test: ' + str(np.std(all_acc_test)))
-            print('acc-mean-test: ' + str(np.mean(all_acc_test)))
+            print('Test accuracy std: ' + str(np.std(all_acc_test)))
+            print('Mean test accuracy: ' + str(np.mean(all_acc_test)))
             if wandb_flag:
-                wandb.log({"acc-std test": np.std(all_acc_test)})
-                wandb.log({"avg acc test": np.mean(all_acc_test)})
+                wandb.log({"Test accuracy std": np.std(all_acc_test)})
+                wandb.log({"Mean test accuracy": np.mean(all_acc_test)})
                 wandb.finish()
 
 
-def run_multiclass_cross_val_fixed_splits(dataset_name, with_constant_one_feature=True):
+def multiclass_cross_validation(dataset, with_constant_one_feature=True):
     num_folds = 10
     max_attention_depths = [0, 1, 2]
-    max_graph_depths = [0, 1, 2]
+    max_walk_lengths = [0, 1, 2]
     attention_types = [1, 2, 3, 4]
 
+    formatter = DataFormatter(GraphData)
+    X, y = formatter.pyg_data_list_to_tree_graph_data_list(dataset)
+    X, y = np.array(X), np.array(y)
+
+    kf = KFold(n_splits=num_folds)
+
     for max_attention_depth in max_attention_depths:
-        for max_graph_depth in max_graph_depths:
-            print('running dataset: ' + dataset_name + ' max_attention_depth: ' + str(
-                max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth))
+        for max_walk_len in max_walk_lengths:
+            print('Running dataset: ' + dataset.anme + ' max_attention_depth: ' + str(
+                max_attention_depth) + ' max_walk_len: ' + str(max_walk_len))
             all_acc_test = []
             if wandb_flag:
                 wandb.init(project='GTA_experiments', reinit=True, entity='your entity',
                            config={
                                "max_attention": max_attention_depth,
-                               "max_graph_depth": max_graph_depth,
+                               "max_graph_depth": max_walk_len,
                                "num_folds": num_folds,
                                "n_estimators": n_estimators,
                                "learning_rate": learning_rate,
-                               "dataset": dataset_name,
+                               "dataset": dataset.anme,
                                "attention_types": str(attention_types),
                                'graph_level_aggregators': str([agg.name for agg in graph_level_aggregators]),
                                'attention_type_sample_probability': attention_type_sample_probability,
                            })
-                run_name = '%s_%d_%d' % (dataset_name, max_attention_depth, max_graph_depth)
+                run_name = '%s_%d_%d' % (dataset.anme, max_attention_depth, max_walk_len)
                 wandb.run.name = run_name
 
-            for idx in range(1, num_folds + 1):
-                print('running dataset: ' + dataset_name + ' max_attention_depth: ' + str(
-                    max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth) + ' fold: ' + str(idx))
-                X_train, y_train = data_utils.load_split_processed_datasets(dataset_name, fold_idx=idx, is_train=True)
-                X_test, y_test = data_utils.load_split_processed_datasets(dataset_name, fold_idx=idx, is_train=False)
+            for idx, (train_index, test_index) in enumerate(kf.split(X)):
+                print('Running dataset: ' + dataset.anme + ' max_attention_depth: ' + str(
+                    max_attention_depth) + ' max_walk_len: ' + str(max_walk_len) + ' fold: ' + str(idx))
+                X_train, y_train = list(X[train_index]), list(y[train_index])
+                X_test, y_test = list(X[test_index]), list(y[test_index])
                 num_of_classes = np.max([np.max(y_test), np.max(y_train)]) + 1
                 if with_constant_one_feature:
                     add_constant_one_feature(X_train)
@@ -389,15 +392,15 @@ def run_multiclass_cross_val_fixed_splits(dataset_name, with_constant_one_featur
 
                 if X_train[0].adj_powers is not list:
                     for graph in X_train:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                     for graph in X_test:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                 test_preds_all_classes = np.zeros(shape=(len(y_test), num_of_classes))
                 for class_i in range(num_of_classes):
                     X_train_class = X_train
                     y_train_class = (y_train == class_i).astype(int)
                     gbgta = train(X_train=X_train_class, y_train=y_train_class, max_attention_depth=max_attention_depth,
-                                  max_graph_depth=max_graph_depth, attention_types=attention_types, classification=True)
+                                  max_graph_depth=max_walk_len, attention_types=attention_types, classification=True)
                     test_preds = gbgta.predict_proba(X_test)[:, 1]
                     test_preds_all_classes[:, class_i] = test_preds
 
@@ -418,35 +421,44 @@ def run_multiclass_cross_val_fixed_splits(dataset_name, with_constant_one_featur
                 wandb.finish()
 
 
-def run_multiclass_ogb_splits(dataset, with_constant_one_feature=True):
+
+def multiclass_train_val_test_ogb_splits(dataset, with_constant_one_feature=True):
     max_attention_depths = [0, 1, 2]
-    max_graph_depths = [0, 1, 2]
+    max_walk_lengths = [0, 1, 2]
     attention_types = [1, 2, 3, 4]
-    formatter = DataFormatter(GraphData)
-    X_train, y_train, X_val, y_val, X_test, y_test = dataset(formatter)
+
+    formatter = DataFormatter(SparseGraphData)
+    split_idx = dataset.get_idx_split()
+    train_graphs_list = dataset[split_idx["train"]]
+    valid_graphs_list = dataset[split_idx["valid"]]
+    test_graphs_list = dataset[split_idx["test"]]
+    X_train, y_train = formatter.pyg_data_list_to_tree_graph_data_list(train_graphs_list)
+    X_val, y_val = formatter.pyg_data_list_to_tree_graph_data_list(valid_graphs_list)
+    X_test, y_test = formatter.pyg_data_list_to_tree_graph_data_list(test_graphs_list)
+
     for max_attention_depth in max_attention_depths:
-        for max_graph_depth in max_graph_depths:
-            print('running dataset: ' + dataset.__name__ + ' max_attention_depth: ' + str(
-                max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth))
+        for max_walk_len in max_walk_lengths:
+            print('Running dataset: ' + dataset.name + ' max_attention_depth: ' + str(
+                max_attention_depth) + ' max_walk_len: ' + str(max_walk_len))
             all_acc_test = []
             all_acc_val = []
             if wandb_flag:
                 wandb.init(project='GTA_experiments', reinit=True, entity='your entity',
                            config={
                                "max_attention": max_attention_depth,
-                               "max_graph_depth": max_graph_depth,
+                               "max_graph_depth": max_walk_len,
                                "n_estimators": n_estimators,
                                "learning_rate": learning_rate,
-                               "dataset": dataset.__name__,
+                               "dataset": dataset.name,
                                "attention_types": str(attention_types),
                                'graph_level_aggregators': str([agg.name for agg in graph_level_aggregators]),
                                'attention_type_sample_probability': attention_type_sample_probability,
                            })
-                run_name = '%s_%d_%d' % (dataset.__name__, max_attention_depth, max_graph_depth)
+                run_name = '%s_%d_%d' % (dataset.name, max_attention_depth, max_walk_len)
                 wandb.run.name = run_name
 
-                print('running dataset: ' + dataset.__name__ + ' max_attention_depth: ' + str(
-                    max_attention_depth) + ' max_graph_depth: ' + str(max_graph_depth))
+                print('Running dataset: ' + dataset.name + ' max_attention_depth: ' + str(
+                    max_attention_depth) + ' max_walk_length: ' + str(max_walk_len))
                 num_of_classes = np.max([np.max(y_test), np.max(y_train)]) + 1
                 if with_constant_one_feature:
                     add_constant_one_feature(X_train)
@@ -459,17 +471,17 @@ def run_multiclass_ogb_splits(dataset, with_constant_one_feature=True):
 
                 if X_train[0].adj_powers is not list:
                     for graph in X_train:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                     for graph in X_test:
-                        graph.compute_walks(max_graph_depth)
+                        graph.compute_walks(max_walk_len)
                 test_preds_all_classes = np.zeros(shape=(len(y_test), num_of_classes))
-                val_preds_all_classes = np.zeros(shape=(len(y_test), num_of_classes))
+                val_preds_all_classes = np.zeros(shape=(len(y_val), num_of_classes))
                 for class_i in range(num_of_classes):
                     X_train_class = X_train
                     y_train_class = (y_train == class_i).astype(int)
                     gbgta = train(X_train=X_train_class, y_train=y_train_class,
                                   max_attention_depth=max_attention_depth,
-                                  max_graph_depth=max_graph_depth, attention_types=attention_types,
+                                  max_graph_depth=max_walk_len, attention_types=attention_types,
                                   classification=True)
                     val_preds = gbgta.predict_proba(X_val)[:, 1]
                     val_preds_all_classes[:, class_i] = val_preds

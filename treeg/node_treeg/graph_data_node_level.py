@@ -86,33 +86,46 @@ class SparseGraphData(GraphData):
         self.sparse_adj = sparse_adj_mat
         self.sparse_features = sparse.csr_matrix(features)
         self.sparse_adj_powers = np.NAN
+        self._num_features = features.shape[1]
+        self._num_nodes = features.shape[0]
 
     def compute_walks(self, max_walk_len):
         walks = []
         for walk_len in range(max_walk_len + 1):
             powered = self.sparse_adj ** walk_len
             if not (type(powered) == sparse.csr_matrix):
-                powered = powered.tocsr()
+                powered = sparse.csr_matrix(powered)
             walks.append(powered)
         self.sparse_adj_powers = np.array(walks)
 
+    @lru_cache
     def propagate_with_attention(self, walk_len, attention_set, attention_type):
         n_nodes = self.get_number_of_nodes()
+        if attention_set == '[]':
+            attention_set = []
+        else:
+            attention_set = [int(x) for x in attention_set[1:-1].split(',')]
         not_in_attention = np.array(list(set(range(n_nodes)) - set(
             attention_set)))
         if attention_type == 1:
             sparse_power = self.sparse_adj_powers[walk_len].tolil()
-            sparse_features_masked = self.sparse_features.tolil()
-            sparse_features_masked[:, not_in_attention] = 0
-            propagated_features = sparse_power * sparse_features_masked
+            # sparse_features_masked = self.sparse_features.tolil()
+            sparse_power[:, not_in_attention] = 0
+            propagated_features = sparse_power * self.sparse_features
             return propagated_features.toarray()
         elif attention_type == 4:
             masked_sparse_power = self.sparse_adj_powers[walk_len]
             diag = masked_sparse_power.diagonal()
-            sparse_power_diag = diags(diag, [0])
+            sparse_power_diag = diags(diag)
             propagated_features = sparse_power_diag * self.sparse_features
             return propagated_features.toarray()
         else:
             print(
                 'Invalid attention type ' + str(attention_type) + '. Valid attentions for node-level tasks are 1 and 4')
             return None
+
+    def get_number_of_nodes(self):
+        return self._num_nodes
+
+    def get_number_of_features(self):
+        return self._num_features

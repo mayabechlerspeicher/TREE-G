@@ -1,5 +1,5 @@
 import numpy as np
-from gta_graph.graph_data_graph_level import GraphData
+from treeg.graph_treeg.graph_data_graph_level import GraphData
 
 
 def get_hist_over_trees(model, g: GraphData):

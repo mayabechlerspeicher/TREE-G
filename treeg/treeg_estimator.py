@@ -1,11 +1,11 @@
 from sklearn.base import BaseEstimator, RegressorMixin
 import numpy as np
-from gta_graph.gta_graph_level import GTAGraph
-from gta_node.gta_node_level import GTANode
+from treeg.graph_treeg import GraphTreeG
+from treeg.node_treeg import VertexTreeG
 from typing import List
 
 
-class GTA(BaseEstimator, RegressorMixin):
+class TreeG(BaseEstimator, RegressorMixin):
     def __init__(self,
                  classifier: bool = True,
                  gain_criterion: str = 'entropy',
@@ -32,13 +32,13 @@ class GTA(BaseEstimator, RegressorMixin):
 
         walk_lens = list(range(0, max_walk_len + 1))
         if is_graph_task:
-            self.model = GTAGraph(max_attention_depth=max_attention, walk_lens=walk_lens,
+            self.model = GraphTreeG(max_attention_depth=max_attention, walk_lens=walk_lens,
                                   min_leaf_size=min_leaf_size,
                                   max_number_of_leafs=max_number_of_leafs, attention_types=attention_types,
                                   attention_type_sample_probability=attention_type_sample_probability)
 
         else:
-            self.model = GTANode(max_attention_depth=max_attention, walk_lens=walk_lens,
+            self.model = VertexTreeG(max_attention_depth=max_attention, walk_lens=walk_lens,
                                  min_leaf_size=min_leaf_size,
                                  max_number_of_leafs=max_number_of_leafs, attention_types=attention_types)
 

@@ -1,8 +1,8 @@
 import numpy as np
 from typing import List, NamedTuple
-from gta_graph.tree_node_graph_level import TrainedTreeNode
-from gta_graph.aggregator_graph_level import Aggregator, graph_level_aggregators
-from gta_graph.graph_data_graph_level import GraphData
+from treeg.graph_treeg.tree_node_graph_level import TrainedTreeNode
+from treeg.graph_treeg.aggregator_graph_level import Aggregator, graph_level_aggregators
+from treeg.graph_treeg.graph_data_graph_level import GraphData
 from sklearn.tree import DecisionTreeRegressor
 
 

@@ -1,8 +1,7 @@
 from functools import lru_cache
 import numpy as np
-from numpy.linalg import matrix_power
 from typing import List
-from gta_graph.aggregator_graph_level import Aggregator
+from treeg.graph_treeg.aggregator_graph_level import Aggregator
 from scipy import sparse
 from scipy.sparse import diags
 
@@ -121,9 +120,13 @@ class SparseGraphData(GraphData):
                 powered = powered.tocsr()
             walks.append(powered)
         self.sparse_adj_powers = np.array(walks)
-
+    @lru_cache
     def propagate_with_attention(self, walk_len, attention_set, attention_type=2):
         n_nodes = self.get_number_of_nodes()
+        if attention_set == '[]':
+            attention_set = []
+        else:
+            attention_set = [int(x) for x in attention_set[1:-1].split(',')]
         not_in_attention = np.array(list(set(range(n_nodes)) - set(attention_set)))
         if attention_type == 1:
             masked_sparse_power = self.sparse_adj_powers[walk_len].tolil()
@@ -147,7 +150,7 @@ class SparseGraphData(GraphData):
         elif attention_type == 4:
             masked_sparse_power = self.sparse_adj_powers[walk_len]
             diag = masked_sparse_power.diagonal()
-            sparse_power_diag = diags(diag, 0)
+            sparse_power_diag = diags(diag)
             propagated_features = sparse_power_diag * self.sparse_features
             return propagated_features.toarray()[attention_set, :]
 
