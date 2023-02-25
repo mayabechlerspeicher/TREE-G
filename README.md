@@ -1,13 +1,71 @@
 # TREE-G - Decision Trees with Dynamic Graph Features
 TREE-Gs are decision trees specialized for graph data. They can be used for classificaiton, regression, vertex-labeling, graph-labeling, and edge-labeling.
-The model is discussed in the paper [Decision Trees with Dynamic Graph Features](https://arxiv.org/abs/2207.02760)
+The model is described in the paper [Decision Trees with Dynamic Graph Features](https://arxiv.org/abs/2207.02760)
+TREE-G is highly recommended when learning over tabular features, and can outperform Graph Neural Networks on such tasks, as shown in the paper.
 The library is Scikit compatible.
 
-## Getting Started
-Run examples can be found in gra_graph/run_graph_task_example.py and gra_node/run_node_task_example.py
+![Screenshot](attention.png)
 
-### Prerequisites
-The depndencies can be found in the requierements.txt file
+## Getting Started
+
+Create a conda environment with the requierements.txt file:
+```
+$ conda create --name <env> --file requierements.txt
+```
+Run examples are found in the experiments directory. 
+To run graph level experiments run:
+```
+$ python experiments/run_graph_experiments.py --exp_name=<dataset name>
+```
+The available datasets are:
+* mutag
+* proteins
+* nci1
+* dd
+* enzymes
+* imdbb
+* imdbm
+* ptcmr
+* mutagenicity
+* hiv
+
+To run node level experiments run:
+```
+$ python experiments/run_node_experiments.py  --exp_name=<dataset name>
+```
+The available datasets are:
+* cora
+* citeseer
+* pubmed
+* arxiv
+
+The depndencies to install via pip can be found in the requierements_pip.txt file
+
+### Using Tree-Gs estimators
+If you wish to use Tree-G as an estimator for your own algorithm, the data should be in a treeg-graph format.
+To convert a pytorch-geometric graph to tree-graph, use for graph-level tasks:
+```
+from treeg.graph_treeg.graph_data_graph_level import GraphData
+import treeg.graph_treeg.formater_graph_level as formatter
+
+dataset = <your pytorch-geometric dataset>
+formatter = DataFormatter(GraphData)
+X, y = formatter.pyg_data_list_to_tree_graph_data_list(dataset)
+X, y = np.array(X), np.array(y)
+```
+
+and for vertex-level tasks:
+```
+from treeg.graph_treeg.graph_data_node_level import GraphData
+import treeg.graph_treeg.data_formetter_node_level.py as formatter
+
+dataset = <your pytorch-geometric dataset>
+graph, y_nodes = formatter.transductive_pyg_graph_to_tree_graph(dataset)
+X = np.arange(dataset.data.num_nodes)
+X_train, X_valid, X_test = X[dataset.data.train_mask], X[dataset.data.val_mask], X[dataset.data.test_mask]
+y_train, y_valid, y_test = y_nodes[dataset.data.train_mask], y_nodes[dataset.data.val_mask], y_nodes[dataset.data.test_mask]
+```
+
 
 #### Cite
 If you use this library, please cite:
@@ -30,3 +88,6 @@ If you use this library, please cite:
   copyright = {Creative Commons Attribution 4.0 International}
 }
 ```
+
+### Contact
+For any questions, please contact Maya Bechler-Speicher: mayab4 at mail dot tau dot ac dot il.
