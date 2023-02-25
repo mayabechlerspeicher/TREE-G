@@ -41,6 +41,16 @@ The available datasets are:
 
 The depndencies to install via pip can be found in the requierements_pip.txt file
 
+
+### IMPORTANT NOTE
+The experiements folder uses a 3rd party library - starboost, which have a bug. To fix it, please change the following:
+Line 124 of boosting.py in starboost site-packages files should be changed to: 
+```
+ y_pred[:, i] += self.learning_rate * direction[:, i]  
+```
+The same fix should be applied in line 179
+/usr/local/lib/python3.8/dist-packages/starboost/
+
 ### Using Tree-Gs estimators
 If you wish to use Tree-G as an estimator for your own algorithm, the data should be in a treeg-graph format.
 To convert a pytorch-geometric graph to tree-graph, use for graph-level tasks:
