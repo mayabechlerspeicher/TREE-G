@@ -43,6 +43,8 @@ class GraphTreeG(BaseEstimator, RegressorMixin):
         self.tree_learner_root_ = None
         self.stats_dict = None
         self.attention_type_sample_probability = attention_type_sample_probability
+        self.node_count = None
+        self.tree_depth = None
 
     def get_params(self, deep=True):
         """
@@ -103,13 +105,18 @@ class GraphTreeG(BaseEstimator, RegressorMixin):
                 valid_params[key] = value
 
         for key, sub_params in nested_params.items():
-            valid_params[key].set_params(**sub_params)
+            valid_params[key].treeg_params(**sub_params)
 
         return self
 
     def fit(self, X: List[GraphData], y: np.array, sample_weight=None):
         if isinstance(X, np.ndarray):
-            X = X[0, :].tolist()
+            if len(X.shape) == 1:
+                X = list(X)
+            elif len(X.shape) == 2:
+                X = X[0, :].tolist()
+            else:
+                raise ValueError("Shape of X is incompatible")
 
         if len(X) != len(y):
             raise ValueError("Size of X and y mismatch")
@@ -130,6 +137,8 @@ class GraphTreeG(BaseEstimator, RegressorMixin):
         self.tree_learner_root_ = TreeNodeLearner(params=params, active=list(range(0, len(X))), parent=None)  # root
         self.train_L2, self.train_total_gain, self.stats_dict = self.tree_learner_root_.fit(X, y)
         self.trained_tree_root_ = self.tree_learner_root_.build_trained_tree_and_get_root()
+        self.trained_tree_root_.node_count, self.trained_tree_root_.tree_depth = self.tree_learner_root_.node_count, self.tree_learner_root_.tree_depth
+        self.node_count, self.tree_depth = self.tree_learner_root_.node_count, self.tree_learner_root_.tree_depth
         return self
 
     def predict(self, X: List[GraphData]):

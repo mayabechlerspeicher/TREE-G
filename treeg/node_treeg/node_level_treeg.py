@@ -28,10 +28,12 @@ class VertexTreeG(BaseEstimator, RegressorMixin):
                  attention_types: List[int] = [1, 4],
                  attention_type_sample_probability: float = 0.5,
                  ):
+        self.node_count = None
+        self.tree_depth = None
         self.train_total_gain = None
         self.train_L2 = None
         self.trained_tree_ = None
-        self.tree_learner = None
+        self.tree_learner_root_ = None
         self.walk_lens = walk_lens
         self.max_attention_depth = max_attention_depth
         self.max_number_of_leafs = max_number_of_leafs
@@ -40,6 +42,7 @@ class VertexTreeG(BaseEstimator, RegressorMixin):
         self.graph = graph
         self.attention_types = attention_types
         self.attention_type_sample_probability = attention_type_sample_probability
+        self.stats_dict = None
 
     def get_params(self, deep=True):
         """
@@ -100,7 +103,7 @@ class VertexTreeG(BaseEstimator, RegressorMixin):
                 valid_params[key] = value
 
         for key, sub_params in nested_params.items():
-            valid_params[key].set_params(**sub_params)
+            valid_params[key].treeg_params(**sub_params)
 
         return self
 
@@ -118,17 +121,18 @@ class VertexTreeG(BaseEstimator, RegressorMixin):
             attention_types=self.attention_types,
             attention_type_sample_probability=self.attention_type_sample_probability,
         )
-        self.tree_learner = TreeNodeLearner(params=params, active=np.array(X),
+        self.tree_learner_root_ = TreeNodeLearner(params=params, active=np.array(X),
                                             parent=None)
-        self.train_L2, self.train_total_gain = self.tree_learner.fit(X, y)
+        self.train_L2, self.train_total_gain, self.stats_dict = self.tree_learner_root_.fit(X, y)
+        self.node_count, self.tree_depth = self.tree_learner_root_.node_count, self.tree_learner_root_.tree_depth
         return self
 
     def predict(self, X: List[int]):
-        all_predictions = self.tree_learner.predict_all()
+        all_predictions = self.tree_learner_root_.predict_all()
         if isinstance(X, np.ndarray):
             X = X[0].tolist()
         array = np.array(all_predictions[X])
         return array.reshape(-1, 1)
 
     def print_tree(self):
-        self.tree_learner.print_tree()
+        self.tree_learner_root_.print_tree()

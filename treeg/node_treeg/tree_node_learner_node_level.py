@@ -62,6 +62,11 @@ class TreeNodeLearner:
         self.active_gt = None
         self.active_lte = None
 
+        self.stats_dict = None
+        self.node_count = 0
+        self.depth = 0
+        self.tree_depth = 0
+
         if attention_sets_cache_map == None:
             all_nodes_str = str(list(range(0, self.params.graph.get_number_of_nodes())))
             self.attention_sets_cache_map = {all_nodes_str: 0}
@@ -309,15 +314,18 @@ class TreeNodeLearner:
                                    feature_index=feature_index, attention_type=attention_type)
             lte = leaf_to_split.lte
             gt = leaf_to_split.gt
+            self.tree_depth = max(self.tree_depth, lte.depth, gt.depth)
+            self.node_count += 2
             potential_gains += [lte.find_best_split(X, y), gt.find_best_split(X, y)]
             leafs += [lte, gt]
             total_gain += gain
 
+        self.stats_dict = stats_dict
         L2 = 0
         for leaf in leafs:
             labels = y[leaf.active]
             L2 += sum((leaf.value_as_leaf - labels) ** 2)
-        return L2, total_gain
+        return L2, total_gain, stats_dict
 
     def predict_all(self, predictions: np.array = None) -> np.array:
         if predictions is None:

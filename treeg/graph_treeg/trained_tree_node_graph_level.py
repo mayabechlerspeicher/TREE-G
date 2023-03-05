@@ -15,6 +15,8 @@ class TrainedTreeNode:
                  max_attention_depth: int = None,
                  aggregator: Aggregator = None,
                  attention_type: int = None,
+                 node_count: int = None,
+                 tree_depth: int = None,
                  ):
         """
 
@@ -28,6 +30,8 @@ class TrainedTreeNode:
         :param max_attention_depth: The maximum distance from the node where the attentions are considered as available attentions
         :param aggregator: The chosen aggregator
         :param attention_type: The chosen attention type
+        :param node_count: The number of nodes in the subtree
+        :param tree_depth: The depth of the subtree
         """
         self.gt = gt
         self.lte = lte
@@ -39,6 +43,9 @@ class TrainedTreeNode:
         self.walk_len = walk_len
         self.feature_index = feature_index
         self.max_attention_depth = max_attention_depth
+        self.node_count = node_count
+        self.tree_depth = tree_depth
+
 
     def print_tree(self, indent=""):
         if self.gt is None:
@@ -76,3 +83,7 @@ class TrainedTreeNode:
             else:
                 pnt = pnt.gt
         return pnt.value_as_leaf, histogram
+
+    def compute_feature_importances(self):
+        #TODO: implement this
+        pass

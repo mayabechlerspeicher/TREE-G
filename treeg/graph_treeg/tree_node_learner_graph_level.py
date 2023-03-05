@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List, NamedTuple
-from treeg.graph_treeg.tree_node_graph_level import TrainedTreeNode
+from treeg.graph_treeg.trained_tree_node_graph_level import TrainedTreeNode
 from treeg.graph_treeg.aggregator_graph_level import Aggregator, graph_level_aggregators
 from treeg.graph_treeg.graph_data_graph_level import GraphData
 from sklearn.tree import DecisionTreeRegressor
@@ -51,6 +51,9 @@ class TreeNodeLearner:
         self.gt_value_ = None
 
         self.stats_dict = None
+        self.node_count = 0
+        self.depth = 0
+        self.tree_depth = 0
 
     def get_available_attentions_indices(self):
         """
@@ -149,6 +152,7 @@ class TreeNodeLearner:
                                    active=self.active_lte_,
                                    parent=self)
         lte_node.value_as_leaf = np.mean(y[self.active_lte_])
+        lte_node.depth = self.depth + 1
 
         gt_sampled_atttention_types = self.sample_attention_types()
         if gt_sampled_atttention_types == []:
@@ -171,6 +175,7 @@ class TreeNodeLearner:
                                   active=self.active_gt_,
                                   parent=self)
         gt_node.value_as_leaf = np.mean(y[self.active_gt_])
+        gt_node.depth = self.depth + 1
 
         self.gt = gt_node
         self.lte = lte_node
@@ -240,6 +245,7 @@ class TreeNodeLearner:
         stats_dict = self.init_stats_dict()
         leafs = [self]
         total_gain = 0
+
         potential_gains = [self.find_best_split(X, y)]
         for _ in range(1, self.params.max_number_of_leafs):
             index_max = np.argmax(potential_gains)
@@ -255,6 +261,8 @@ class TreeNodeLearner:
                                    feature_index=feature_index, attention_type=attention_type)
             lte = leaf_to_split.lte
             gt = leaf_to_split.gt
+            self.tree_depth = max(self.tree_depth, lte.depth, gt.depth)
+            self.node_count += 2
             potential_gains += [lte.find_best_split(X, y), gt.find_best_split(X, y)]
             leafs += [lte, gt]
             total_gain += gain
@@ -326,7 +334,8 @@ class TreeNodeLearner:
                                                      active_attention_index=self.active_attention_index,
                                                      max_attention_depth=self.params.max_attention_depth,
                                                      aggregator=self.aggregator,
-                                                     attention_type=self.attention_type)
+                                                     attention_type=self.attention_type,
+                                                    )
 
             self.trained_tree_node.lte = self.lte.build_trained_tree_and_get_root()
             self.trained_tree_node.gt = self.gt.build_trained_tree_and_get_root()
