@@ -55,6 +55,8 @@ class TreeNodeLearner:
         self.depth = 0
         self.tree_depth = 0
 
+        self.importance = None
+
     def get_available_attentions_indices(self):
         """
         This function translate the available attention sets to their indices in the following order:
@@ -179,7 +181,7 @@ class TreeNodeLearner:
 
         self.gt = gt_node
         self.lte = lte_node
-
+        self.importance = self.compute_node_importance(X, y)
         available_attention_indices = self.get_available_attentions_indices()
         sizes = [len(self.params.walk_lens), len(available_attention_indices), len(self.params.attention_types),
                  len(self.params.aggregators), X[0].get_number_of_features()]
@@ -326,6 +328,7 @@ class TreeNodeLearner:
                                                      max_attention_depth=self.params.max_attention_depth,
                                                      aggregator=None,
                                                      attention_type=self.attention_type,
+                                                     gain=self.potential_gain
                                                      )
         else:
             self.trained_tree_node = TrainedTreeNode(gt=None, lte=None, feature_index=self.feature_index,
@@ -335,9 +338,32 @@ class TreeNodeLearner:
                                                      max_attention_depth=self.params.max_attention_depth,
                                                      aggregator=self.aggregator,
                                                      attention_type=self.attention_type,
-                                                    )
+                                                     gain=self.potential_gain
+                                                     )
 
             self.trained_tree_node.lte = self.lte.build_trained_tree_and_get_root()
             self.trained_tree_node.gt = self.gt.build_trained_tree_and_get_root()
 
         return self.trained_tree_node
+
+    def compute_node_importance(self, all_train_data, y):
+        """
+        The impurity measure is variance of the labels of the active examples in the node
+        """
+        if self.gt is None:
+            return 0
+        else:
+            samples_per = len(self.active) / len(all_train_data)
+            lte_samples_per = len(self.lte.active) / len(all_train_data)
+            gt_samples_per = len(self.gt.active) / len(all_train_data)
+
+            active_y = y[self.active]
+            active_y_lte = y[self.lte.active]
+            active_y_gt = y[self.gt.active]
+
+            impurity = np.var(active_y)
+            lte_impurity = np.var(active_y_lte)
+            gt_impurity = np.var(active_y_gt)
+
+            node_importance = (samples_per * impurity) - (lte_samples_per * lte_impurity) - (gt_samples_per * gt_impurity)
+            return node_importance

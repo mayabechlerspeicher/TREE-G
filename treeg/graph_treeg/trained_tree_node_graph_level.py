@@ -17,6 +17,7 @@ class TrainedTreeNode:
                  attention_type: int = None,
                  node_count: int = None,
                  tree_depth: int = None,
+                 gain: float = None,
                  ):
         """
 
@@ -32,6 +33,7 @@ class TrainedTreeNode:
         :param attention_type: The chosen attention type
         :param node_count: The number of nodes in the subtree
         :param tree_depth: The depth of the subtree
+        :param gain: The gain of the split
         """
         self.gt = gt
         self.lte = lte
@@ -45,6 +47,7 @@ class TrainedTreeNode:
         self.max_attention_depth = max_attention_depth
         self.node_count = node_count
         self.tree_depth = tree_depth
+        self.gain = gain
 
 
     def print_tree(self, indent=""):
@@ -83,7 +86,3 @@ class TrainedTreeNode:
             else:
                 pnt = pnt.gt
         return pnt.value_as_leaf, histogram
-
-    def compute_feature_importances(self):
-        #TODO: implement this
-        pass

@@ -45,6 +45,7 @@ class GraphTreeG(BaseEstimator, RegressorMixin):
         self.attention_type_sample_probability = attention_type_sample_probability
         self.node_count = None
         self.tree_depth = None
+        self.feature_importances_ = None
 
     def get_params(self, deep=True):
         """
@@ -139,7 +140,22 @@ class GraphTreeG(BaseEstimator, RegressorMixin):
         self.trained_tree_root_ = self.tree_learner_root_.build_trained_tree_and_get_root()
         self.trained_tree_root_.node_count, self.trained_tree_root_.tree_depth = self.tree_learner_root_.node_count, self.tree_learner_root_.tree_depth
         self.node_count, self.tree_depth = self.tree_learner_root_.node_count, self.tree_learner_root_.tree_depth
+        self.feature_importances_ = self.compute_feature_importances(X[0].get_number_of_features())
         return self
+
+    def compute_feature_importances(self, num_of_features):
+        cum_feature_gain = np.zeros(num_of_features)
+        self.cum_feature_gain_traverse(self.trained_tree_root_, cum_feature_gain)
+        for idx in range(num_of_features):
+            if self.stats_dict['feature_index'][idx] > 0:
+                cum_feature_gain[idx] /= self.stats_dict['feature_index'][idx]
+        return cum_feature_gain
+    def cum_feature_gain_traverse(self, trained_node, cum_feature_gain):
+        if trained_node.gt is None:
+            return
+        cum_feature_gain[trained_node.feature_index] += trained_node.gain
+        self.cum_feature_gain_traverse(trained_node.gt, cum_feature_gain)
+        self.cum_feature_gain_traverse(trained_node.lte, cum_feature_gain)
 
     def predict(self, X: List[GraphData]):
         if isinstance(X, np.ndarray):
