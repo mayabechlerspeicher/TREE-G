@@ -18,13 +18,16 @@ class GraphData:
         self.adj_mat = adj_mat
         self.features = features
         self.labels = labels
-        self.adj_powers = None
+        self.adj_powers = {}
+
+    def _compute_walk(self, walk_len):
+        walk_power = np.linalg.matrix_power(self.adj_mat, walk_len)
+        self.adj_powers[walk_len] = walk_power
+
 
     def compute_walks(self, max_walk_len):
-        walks = []
         for walk_len in range(max_walk_len + 1):
-            walks.append(np.linalg.matrix_power(self.adj_mat, walk_len))
-        self.adj_powers = np.array(walks)
+            self._compute_walk(walk_len)
 
     @lru_cache
     def propagate_with_attention(self, walk_len: int, attention_set: str, attention_type: int):
