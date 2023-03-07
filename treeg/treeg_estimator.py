@@ -108,6 +108,6 @@ class TreeG(BaseEstimator, RegressorMixin):
                 valid_params[key] = value
 
         for key, sub_params in nested_params.items():
-            valid_params[key].set_params(**sub_params)
+            valid_params[key].treeg_params(**sub_params)
 
         return self
