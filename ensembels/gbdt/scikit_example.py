@@ -10,9 +10,9 @@ dataset = datasets.TU_MUTAG()
 formatter = DataFormatter(GraphData)
 X, y = formatter.pyg_data_list_to_tree_graph_data_list(dataset)
 X, y = np.array(X), np.array(y)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 
-clf = GradientBoostedTreeGClassifier(n_estimators=20, learning_rate=0.1, max_depth=10, random_state=0).fit(X_train, y_train)
+clf = GradientBoostedTreeGClassifier(n_estimators=50, learning_rate=0.1, max_depth=10, random_state=0).fit(X_train, y_train)
 score = clf.score(X_test, y_test)
 print('score: ' + str(score))
 

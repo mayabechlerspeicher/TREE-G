@@ -24,6 +24,8 @@ from sklearn.utils.validation import _deprecate_positional_args
 from treeg.graph_treeg.graph_level_treeg import GraphTreeG
 from treeg.graph_treeg.aggregator_graph_level import graph_level_aggregators
 from gbdt_losses import *
+from scipy.special import softmax
+from scipy.special import expit as sigmoid
 
 
 def predict_stages(estimators, X, scale, out):
@@ -907,11 +909,12 @@ class GradientBoostedTreeGClassifier(ClassifierMixin, BaseGradientBoostedTreeG):
 
     def score(self, X, y, sample_weight=None):
         """Return the mean accuracy on the given test data and labels."""
-        raw_predictions = self._raw_predict(X).ravel()
-        from eval_utils.metrics import round_acc
-        label_preds = round_acc(y, raw_predictions)
-        return label_preds
-
+        probas = self.predict_proba(X)
+        if self.n_classes_ > 2:
+            pred_labels = np.argmax(probas, axis=1)
+        else:
+            pred_labels = np.where(probas > 0.5, 1, 0)
+        return accuracy_score(y, pred_labels, sample_weight=sample_weight)
 
     def predict_proba(self, X):
         """Predict class probabilities for X.
@@ -931,14 +934,18 @@ class GradientBoostedTreeGClassifier(ClassifierMixin, BaseGradientBoostedTreeG):
             The class probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        raw_predictions = self.decision_function(X)
-        try:
-            return self.loss_._raw_prediction_to_proba(raw_predictions)
-        except NotFittedError:
-            raise
-        except AttributeError:
-            raise AttributeError('loss=%r does not support predict_proba' %
-                                 self.loss)
+        raw_predictions = self._raw_predict(X).ravel()
+        if self.n_classes_ > 2:
+            return softmax(raw_predictions)
+        return sigmoid(raw_predictions)
+
+        # try:
+        #     return self.loss_._raw_prediction_to_proba(raw_predictions)
+        # except NotFittedError:
+        #     raise
+        # except AttributeError:
+        #     raise AttributeError('loss=%r does not support predict_proba' %
+        #                          self.loss)
 
     def predict_log_proba(self, X):
         """Predict class log-probabilities for X.
