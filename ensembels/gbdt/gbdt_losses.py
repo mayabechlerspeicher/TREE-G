@@ -7,8 +7,6 @@ from abc import abstractmethod
 
 import numpy as np
 from scipy.special import expit, logsumexp
-
-from sklearn.tree._tree import TREE_LEAF
 from sklearn.utils.stats import _weighted_percentile
 from sklearn.dummy import DummyClassifier
 from sklearn.dummy import DummyRegressor
@@ -92,7 +90,7 @@ class LossFunction(metaclass=ABCMeta):
         """
 
         # compute leaf for each sample in ``X``.
-        terminal_regions = tree.predict(X) #changed from "apply"
+        terminal_regions = tree.predict(X)
 
         # mask all which are not in sample mask.
         masked_terminal_regions = terminal_regions.copy()
@@ -268,176 +266,6 @@ class LeastAbsoluteError(RegressionLossFunction):
         tree.leafs[leaf].value = _weighted_percentile(diff, sample_weight,
                                                       percentile=50)
 
-
-class HuberLossFunction(RegressionLossFunction):
-    """Huber loss function for robust regression.
-    M-Regression proposed in Friedman 2001.
-    Parameters
-    ----------
-    n_classes : int
-        Number of classes.
-    alpha : float, default=0.9
-        Percentile at which to extract score.
-    References
-    ----------
-    J. Friedman, Greedy Function Approximation: A Gradient Boosting
-    Machine, The Annals of Statistics, Vol. 29, No. 5, 2001.
-    """
-
-    def __init__(self, n_classes, alpha=0.9):
-        super().__init__(n_classes)
-        self.alpha = alpha
-        self.gamma = None
-
-    def init_estimator(self):
-        return DummyRegressor(strategy='quantile', quantile=.5)
-
-    def __call__(self, y, raw_predictions, sample_weight=None):
-        """Compute the Huber loss.
-        Parameters
-        ----------
-        y : ndarray of shape (n_samples,)
-            True labels.
-        raw_predictions : ndarray of shape (n_samples, K)
-            The raw predictions (i.e. values from the tree leaves) of the
-            tree ensemble.
-        sample_weight : ndarray of shape (n_samples,), default=None
-            Sample weights.
-        """
-        raw_predictions = raw_predictions.ravel()
-        diff = y - raw_predictions
-        gamma = self.gamma
-        if gamma is None:
-            if sample_weight is None:
-                gamma = np.percentile(np.abs(diff), self.alpha * 100)
-            else:
-                gamma = _weighted_percentile(np.abs(diff), sample_weight,
-                                             self.alpha * 100)
-
-        gamma_mask = np.abs(diff) <= gamma
-        if sample_weight is None:
-            sq_loss = np.sum(0.5 * diff[gamma_mask] ** 2)
-            lin_loss = np.sum(gamma * (np.abs(diff[~gamma_mask]) -
-                                       gamma / 2))
-            loss = (sq_loss + lin_loss) / y.shape[0]
-        else:
-            sq_loss = np.sum(0.5 * sample_weight[gamma_mask] *
-                             diff[gamma_mask] ** 2)
-            lin_loss = np.sum(gamma * sample_weight[~gamma_mask] *
-                              (np.abs(diff[~gamma_mask]) - gamma / 2))
-            loss = (sq_loss + lin_loss) / sample_weight.sum()
-        return loss
-
-    def negative_gradient(self, y, raw_predictions, sample_weight=None,
-                          **kargs):
-        """Compute the negative gradient.
-        Parameters
-        ----------
-        y : ndarray of shape (n_samples,)
-            The target labels.
-        raw_predictions : ndarray of shape (n_samples, K)
-            The raw predictions (i.e. values from the tree leaves) of the
-            tree ensemble at iteration ``i - 1``.
-        sample_weight : ndarray of shape (n_samples,), default=None
-            Sample weights.
-        """
-        raw_predictions = raw_predictions.ravel()
-        diff = y - raw_predictions
-        if sample_weight is None:
-            gamma = np.percentile(np.abs(diff), self.alpha * 100)
-        else:
-            gamma = _weighted_percentile(np.abs(diff), sample_weight,
-                                         self.alpha * 100)
-        gamma_mask = np.abs(diff) <= gamma
-        residual = np.zeros((y.shape[0],), dtype=np.float64)
-        residual[gamma_mask] = diff[gamma_mask]
-        residual[~gamma_mask] = gamma * np.sign(diff[~gamma_mask])
-        self.gamma = gamma
-        return residual
-
-    def _update_terminal_region(self, tree, terminal_regions,
-                                leaf, X, y, residual, raw_predictions, sample_weight):
-
-        locs = np.where(terminal_regions == leaf)[0]
-        sample_weight = sample_weight.take(locs, axis=0) if sample_weight is not None else np.ones(len(locs))
-
-        gamma = self.gamma
-        diff = (y.take(locs, axis=0)
-                - raw_predictions.take(locs, axis=0))
-        median = _weighted_percentile(diff, sample_weight, percentile=50)
-        diff_minus_median = diff - median
-        tree.leafs[leaf].value = median + np.mean(
-            np.sign(diff_minus_median) *
-            np.minimum(np.abs(diff_minus_median), gamma))
-
-
-class QuantileLossFunction(RegressionLossFunction):
-    """Loss function for quantile regression.
-    Quantile regression allows to estimate the percentiles
-    of the conditional distribution of the target.
-    Parameters
-    ----------
-    n_classes : int
-        Number of classes.
-    alpha : float, default=0.9
-        The percentile.
-    """
-    def __init__(self, n_classes, alpha=0.9):
-        super().__init__(n_classes)
-        self.alpha = alpha
-        self.percentile = alpha * 100
-
-    def init_estimator(self):
-        return DummyRegressor(strategy='quantile', quantile=self.alpha)
-
-    def __call__(self, y, raw_predictions, sample_weight=None):
-        """Compute the Quantile loss.
-        Parameters
-        ----------
-        y : ndarray of shape (n_samples,)
-            True labels.
-        raw_predictions : ndarray of shape (n_samples, K)
-            The raw predictions (i.e. values from the tree leaves) of the
-            tree ensemble.
-        sample_weight : ndarray of shape (n_samples,), default=None
-            Sample weights.
-        """
-        raw_predictions = raw_predictions.ravel()
-        diff = y - raw_predictions
-        alpha = self.alpha
-
-        mask = y > raw_predictions
-        if sample_weight is None:
-            loss = (alpha * diff[mask].sum() -
-                    (1 - alpha) * diff[~mask].sum()) / y.shape[0]
-        else:
-            loss = ((alpha * np.sum(sample_weight[mask] * diff[mask]) -
-                    (1 - alpha) * np.sum(sample_weight[~mask] *
-                                         diff[~mask])) / sample_weight.sum())
-        return loss
-
-    def negative_gradient(self, y, raw_predictions, **kargs):
-        """Compute the negative gradient.
-        Parameters
-        ----------
-        y : ndarray of shape (n_samples,)
-            The target labels.
-        raw_predictions : ndarray of shape (n_samples, K)
-            The raw predictions (i.e. values from the tree leaves) of the
-            tree ensemble at iteration ``i - 1``.
-        """
-        alpha = self.alpha
-        raw_predictions = raw_predictions.ravel()
-        mask = y > raw_predictions
-        return (alpha * mask) - ((1 - alpha) * ~mask)
-
-    def _update_terminal_region(self, tree, terminal_regions,
-                                leaf, X, y, residual, raw_predictions, sample_weight):
-        locs = np.where(terminal_regions == leaf)[0]
-        diff = (y.take(locs, axis=0) - raw_predictions.take(locs, axis=0))
-        sample_weight = sample_weight.take(locs, axis=0) if sample_weight is not None else np.ones(len(locs))
-        val = _weighted_percentile(diff, sample_weight, self.percentile)
-        tree.leafs[leaf].value = val
 
 
 class ClassificationLossFunction(LossFunction, metaclass=ABCMeta):
@@ -774,8 +602,5 @@ class ExponentialLoss(ClassificationLossFunction):
 LOSS_FUNCTIONS = {
     'ls': LeastSquaresError,
     'lad': LeastAbsoluteError,
-    'huber': HuberLossFunction,
-    'quantile': QuantileLossFunction,
-    'deviance': None,  # for both, multinomial and binomial
     'exponential': ExponentialLoss,
 }

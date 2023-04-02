@@ -1,5 +1,5 @@
 import numpy as np
-from treeg.node_treeg.node_level_treeg import VertexTreeG
+from treeg.node_treeg.node_level_treeg import NodeTreeG
 from sklearn.metrics import mean_squared_error, accuracy_score
 from starboost import BoostingClassifier, BoostingRegressor
 from treeg.node_treeg.data_formetter_node_level import DataFormatter
@@ -26,17 +26,17 @@ def train_valid_test_multiclass_paralel(graph, X_train, y_train, X_valid, X_test
                                         train_results_arr, test_results_arr, valid_results_arr, classification=True):
     boosting_model = BoostingClassifier if classification else BoostingRegressor
     gbgta = boosting_model(
-        init_estimator=VertexTreeG(graph=graph,
-                                   max_attention_depth=max_attention_depth,
-                                   walk_lens=list(range(0, max_graph_depth + 1)),
-                                   attention_types=attention_types,
-                                   attention_type_sample_probability=attention_type_sample_probability),
-        base_estimator=VertexTreeG(graph=graph,
-                                   max_attention_depth=max_attention_depth,
-                                   walk_lens=list(range(0, max_graph_depth + 1)),
-                                   attention_types=attention_types,
-                                   attention_type_sample_probability=attention_type_sample_probability
-                                   ),
+        init_estimator=NodeTreeG(graph=graph,
+                                 max_attention_depth=max_attention_depth,
+                                 walk_lens=list(range(0, max_graph_depth + 1)),
+                                 attention_types=attention_types,
+                                 attention_type_sample_probability=attention_type_sample_probability),
+        base_estimator=NodeTreeG(graph=graph,
+                                 max_attention_depth=max_attention_depth,
+                                 walk_lens=list(range(0, max_graph_depth + 1)),
+                                 attention_types=attention_types,
+                                 attention_type_sample_probability=attention_type_sample_probability
+                                 ),
         n_estimators=n_estimators,
         learning_rate=learning_rate)
     y = np.array(y_train)

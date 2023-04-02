@@ -17,7 +17,7 @@ from collections import defaultdict
 ###                                                          ###
 ################################################################
 
-class VertexTreeG(BaseEstimator, RegressorMixin):
+class NodeTreeG(BaseEstimator, RegressorMixin):
     def __init__(self,
                  graph: GraphData = None,
                  walk_lens: List[int] = [0, 1, 2],
@@ -27,6 +27,7 @@ class VertexTreeG(BaseEstimator, RegressorMixin):
                  min_leaf_size: int = 10,
                  attention_types: List[int] = [1, 4],
                  attention_type_sample_probability: float = 0.5,
+                 random_state: int = 42,
                  ):
         self.node_count = None
         self.tree_depth = None

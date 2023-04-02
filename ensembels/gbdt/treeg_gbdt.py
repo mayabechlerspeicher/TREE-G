@@ -17,11 +17,10 @@ from sklearn.tree._tree import DTYPE, DOUBLE
 from sklearn.utils import check_array
 from sklearn.utils import column_or_1d
 from sklearn.utils.validation import check_is_fitted, _check_sample_weight
-from sklearn.utils.multiclass import check_classification_targets
-from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import _deprecate_positional_args
 
 from treeg.graph_treeg.graph_level_treeg import GraphTreeG
+from treeg.node_treeg.node_level_treeg import NodeTreeG
 from treeg.graph_treeg.aggregator_graph_level import graph_level_aggregators
 from gbdt_losses import *
 from scipy.special import softmax
@@ -122,7 +121,7 @@ class BaseGradientBoostedTreeG(BaseEnsemble, metaclass=ABCMeta):
                  init, subsample, max_features, ccp_alpha,
                  random_state, alpha=0.9, verbose=0, max_leaf_nodes=None,
                  warm_start=False, validation_fraction=0.1,
-                 n_iter_no_change=None, tol=1e-4):
+                 n_iter_no_change=None, tol=1e-4, is_graph_task=True):
 
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -155,11 +154,7 @@ class BaseGradientBoostedTreeG(BaseEnsemble, metaclass=ABCMeta):
         self.n_iter_no_change = n_iter_no_change
         self.tol = tol
 
-
-    # def get_masked_subset(self, Xs, mask):
-    #     inds = np.where(mask == True)[0]
-    #     records = Xs[inds]
-    #     return records
+        self.is_graph_task = is_graph_task
 
     def _fit_stage(self, i, X_graph, y, raw_predictions, sample_weight, sample_mask, random_state):
         """Fit another stage of ``n_classes_`` trees to the boosting model. """
@@ -181,41 +176,34 @@ class BaseGradientBoostedTreeG(BaseEnsemble, metaclass=ABCMeta):
             residual = loss.negative_gradient(y, raw_predictions_copy, k=k,
                                               sample_weight=sample_weight)
 
-            # induce regression tree on residuals
-            tree = GraphTreeG(
-                # classifier=False,
-                #            criterion=self.criterion,
-                #            max_features=self.max_features,
-                #            min_samples_split = self.min_samples_split,
-                #            splitter=self.splitter,
-                           aggregators=self.aggregators,
-                           # use_attention_set=self.use_attention_set,
-                           # use_attention_set_comp=self.use_attention_set_comp,
-                           max_attention_depth=self.attention_set_limit,
-                           # max_walk_len=self.max_depth,
-                           min_leaf_size=self.min_samples_leaf,
-                           # random_state=random_state
-                           )
+            if self.is_graph_task:
+                tree = GraphTreeG(
+                               aggregators=self.aggregators,
+                               max_attention_depth=self.attention_set_limit,
+                               walk_lens=list(range(0, self.max_depth + 1)),
+                               min_leaf_size=self.min_samples_leaf,
+                               random_state=random_state
+                               )
+            else:
+                tree = NodeTreeG(
+                               max_attention_depth=self.attention_set_limit,
+                               walk_lens=list(range(0, self.max_depth + 1)),
+                               min_leaf_size=self.min_samples_leaf,
+                               random_state=random_state
+                               )
+
 
             if self.subsample < 1.0:
                 # no inplace multiplication!
                 sample_weight = sample_weight * sample_mask.astype(np.float64)
 
 
+            tree.fit(X_graph[np.where(sample_mask==True)[0]], residual[sample_mask], sample_weight=None)
 
-            # get relevant sebset of records if needed
-            X_subset = X_graph[np.where(sample_mask == True)[0]]
-            # X_subset = X_graph.get_masked_subset(sample_mask)
-            tree.fit(X_subset, residual[sample_mask], sample_weight=None)
-            del X_subset
-            X_subset = None
-
-            # update tree leaves, only for the subset of data
             loss.update_terminal_regions(
                 tree, X_graph, y, residual, raw_predictions, sample_weight, sample_mask,
                 learning_rate=self.learning_rate, k=k)
 
-            # add tree to ensemble
             self.estimators_[i, k] = tree
 
         if self._save_checkpoint:
@@ -710,8 +698,8 @@ class BaseGradientBoostedTreeG(BaseEnsemble, metaclass=ABCMeta):
 
         return leaves
 
-class GradientBoostedTreeGRegressor(RegressorMixin, BaseGradientBoostedTreeG):
-    _SUPPORTED_LOSS = ('ls', 'lad', 'huber', 'quantile')
+class GradientBoostedGraphTreeGRegressor(RegressorMixin, BaseGradientBoostedTreeG):
+    _SUPPORTED_LOSS = ('ls')
 
     @_deprecate_positional_args
     def __init__(self, *, loss='ls', learning_rate=0.1, n_estimators=50,
@@ -805,8 +793,268 @@ class GradientBoostedTreeGRegressor(RegressorMixin, BaseGradientBoostedTreeG):
         R_2 = 1 - (u / v)
         return R_2
 
-class GradientBoostedTreeGClassifier(ClassifierMixin, BaseGradientBoostedTreeG):
-    _SUPPORTED_LOSS = ('ls', 'lad', 'huber', 'quantile')
+class GradientBoostedGraphTreeGClassifier(ClassifierMixin, BaseGradientBoostedTreeG):
+    _SUPPORTED_LOSS = ('ls', 'exponential')
+
+    def __init__(self, *, loss='ls', learning_rate=0.1, n_estimators=50,
+                 subsample=1.0, criterion='mse', splitter='sklearn',
+                 aggregators=graph_level_aggregators, use_attention_set=True, use_attention_set_comp=True,
+                 attention_set_limit=1, save_path=None,
+                 min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.,
+                 max_depth=3, min_impurity_decrease=0.,
+                 min_impurity_split=None, init=None, random_state=None,
+                 max_features=None, alpha=0.9, verbose=0, max_leaf_nodes=None,
+                 warm_start=False, validation_fraction=0.1,
+                 n_iter_no_change=None, tol=1e-4, ccp_alpha=0.0):
+        super().__init__(
+            loss=loss, learning_rate=learning_rate, n_estimators=n_estimators, criterion=criterion, splitter=splitter,
+            aggregators=aggregators, use_attention_set=use_attention_set, use_attention_set_comp=use_attention_set_comp,
+            attention_set_limit=attention_set_limit, save_path=save_path,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            min_weight_fraction_leaf=min_weight_fraction_leaf,
+            max_depth=max_depth, init=init, subsample=subsample,
+            max_features=max_features,
+            min_impurity_decrease=min_impurity_decrease,
+            min_impurity_split=min_impurity_split,
+            random_state=random_state, alpha=alpha, verbose=verbose,
+            max_leaf_nodes=max_leaf_nodes, warm_start=warm_start,
+            validation_fraction=validation_fraction,
+            n_iter_no_change=n_iter_no_change, tol=tol, ccp_alpha=ccp_alpha)
+
+        super().__init__(
+            loss=loss, learning_rate=learning_rate, n_estimators=n_estimators, criterion=criterion, splitter=splitter,
+            aggregators=aggregators, use_attention_set=use_attention_set, use_attention_set_comp=use_attention_set_comp,
+            attention_set_limit=attention_set_limit, save_path=save_path,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            min_weight_fraction_leaf=min_weight_fraction_leaf,
+            max_depth=max_depth, init=init, subsample=subsample,
+            max_features=max_features,
+            random_state=random_state, verbose=verbose,
+            max_leaf_nodes=max_leaf_nodes,
+            min_impurity_decrease=min_impurity_decrease,
+            min_impurity_split=min_impurity_split,
+            warm_start=warm_start, validation_fraction=validation_fraction,
+            n_iter_no_change=n_iter_no_change, tol=tol, ccp_alpha=ccp_alpha)
+
+
+
+    def predict(self, X):
+        """Predict regression target for X.
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, it will be converted to
+            ``dtype=np.float32`` and if a sparse matrix is provided
+            to a sparse ``csr_matrix``.
+        Returns
+        -------
+        y : ndarray of shape (n_samples,)
+            The predicted values.
+        """
+        # X = check_array(X, dtype=DTYPE, order="C", accept_sparse='csr')
+        # In regression we can directly return the raw value from the trees.
+        return self._raw_predict(X).ravel()
+
+    def staged_predict(self, X):
+        """Predict regression target at each stage for X.
+        This method allows monitoring (i.e. determine error on testing set)
+        after each stage.
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, it will be converted to
+            ``dtype=np.float32`` and if a sparse matrix is provided
+            to a sparse ``csr_matrix``.
+        Returns
+        -------
+        y : generator of ndarray of shape (n_samples,)
+            The predicted value of the input samples.
+        """
+        for raw_predictions in self._staged_raw_predict(X):
+            yield raw_predictions.ravel()
+
+    def apply(self, X):
+        """Apply trees in the ensemble to X, return leaf indices.
+        .. versionadded:: 0.17
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, its dtype will be converted to
+            ``dtype=np.float32``. If a sparse matrix is provided, it will
+            be converted to a sparse ``csr_matrix``.
+        Returns
+        -------
+        X_leaves : array-like of shape (n_samples, n_estimators)
+            For each datapoint x in X and for each tree in the ensemble,
+            return the index of the leaf x ends up in each estimator.
+        """
+
+        leaves = super().apply(X)
+        leaves = leaves.reshape(X.shape[0], self.estimators_.shape[0])
+        return leaves
+
+    def score(self, X, y, sample_weight=None):
+        """Return the mean accuracy on the given test data and labels."""
+        probas = self.predict_proba(X)
+        if self.n_classes_ > 2:
+            pred_labels = np.argmax(probas, axis=1)
+        else:
+            pred_labels = np.where(probas > 0.5, 1, 0)
+        return accuracy_score(y, pred_labels, sample_weight=sample_weight)
+
+    def predict_proba(self, X):
+        """Predict class probabilities for X.
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, it will be converted to
+            ``dtype=np.float32`` and if a sparse matrix is provided
+            to a sparse ``csr_matrix``.
+        Raises
+        ------
+        AttributeError
+            If the ``loss`` does not support probabilities.
+        Returns
+        -------
+        p : ndarray of shape (n_samples, n_classes)
+            The class probabilities of the input samples. The order of the
+            classes corresponds to that in the attribute :term:`classes_`.
+        """
+        raw_predictions = self._raw_predict(X).ravel()
+        if self.n_classes_ > 2:
+            return softmax(raw_predictions)
+        return sigmoid(raw_predictions)
+
+        # try:
+        #     return self.loss_._raw_prediction_to_proba(raw_predictions)
+        # except NotFittedError:
+        #     raise
+        # except AttributeError:
+        #     raise AttributeError('loss=%r does not support predict_proba' %
+        #                          self.loss)
+
+    def predict_log_proba(self, X):
+        """Predict class log-probabilities for X.
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, it will be converted to
+            ``dtype=np.float32`` and if a sparse matrix is provided
+            to a sparse ``csr_matrix``.
+        Raises
+        ------
+        AttributeError
+            If the ``loss`` does not support probabilities.
+        Returns
+        -------
+        p : ndarray of shape (n_samples, n_classes)
+            The class log-probabilities of the input samples. The order of the
+            classes corresponds to that in the attribute :term:`classes_`.
+        """
+        proba = self.predict_proba(X)
+        return np.log(proba)
+
+
+
+class GradientBoostedNodeTreeGRegressor(RegressorMixin, BaseGradientBoostedTreeG):
+    _SUPPORTED_LOSS = ('ls')
+
+    @_deprecate_positional_args
+    def __init__(self, *, loss='ls', learning_rate=0.1, n_estimators=50,
+                 subsample=1.0, criterion='mse', splitter='sklearn',
+                 aggregators=graph_level_aggregators, use_attention_set=True, use_attention_set_comp=True,
+                 attention_set_limit=1, save_path=None,
+                 min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.,
+                 max_depth=3, min_impurity_decrease=0.,
+                 min_impurity_split=None, init=None, random_state=None,
+                 max_features=None, alpha=0.9, verbose=0, max_leaf_nodes=None,
+                 warm_start=False, validation_fraction=0.1,
+                 n_iter_no_change=None, tol=1e-4, ccp_alpha=0.0):
+        super().__init__(
+            loss=loss, learning_rate=learning_rate, n_estimators=n_estimators, criterion=criterion, splitter=splitter,
+            aggregators=aggregators, use_attention_set=use_attention_set, use_attention_set_comp=use_attention_set_comp,
+            attention_set_limit=attention_set_limit, save_path=save_path,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            min_weight_fraction_leaf=min_weight_fraction_leaf,
+            max_depth=max_depth, init=init, subsample=subsample,
+            max_features=max_features,
+            min_impurity_decrease=min_impurity_decrease,
+            min_impurity_split=min_impurity_split,
+            random_state=random_state, alpha=alpha, verbose=verbose,
+            max_leaf_nodes=max_leaf_nodes, warm_start=warm_start,
+            validation_fraction=validation_fraction,
+            n_iter_no_change=n_iter_no_change, tol=tol, ccp_alpha=ccp_alpha)
+
+    def predict(self, X):
+        """Predict regression target for X.
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, it will be converted to
+            ``dtype=np.float32`` and if a sparse matrix is provided
+            to a sparse ``csr_matrix``.
+        Returns
+        -------
+        y : ndarray of shape (n_samples,)
+            The predicted values.
+        """
+        # X = check_array(X, dtype=DTYPE, order="C", accept_sparse='csr')
+        # In regression we can directly return the raw value from the trees.
+        return self._raw_predict(X).ravel()
+
+    def staged_predict(self, X):
+        """Predict regression target at each stage for X.
+        This method allows monitoring (i.e. determine error on testing set)
+        after each stage.
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, it will be converted to
+            ``dtype=np.float32`` and if a sparse matrix is provided
+            to a sparse ``csr_matrix``.
+        Returns
+        -------
+        y : generator of ndarray of shape (n_samples,)
+            The predicted value of the input samples.
+        """
+        for raw_predictions in self._staged_raw_predict(X):
+            yield raw_predictions.ravel()
+
+    def apply(self, X):
+        """Apply trees in the ensemble to X, return leaf indices.
+        .. versionadded:: 0.17
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, its dtype will be converted to
+            ``dtype=np.float32``. If a sparse matrix is provided, it will
+            be converted to a sparse ``csr_matrix``.
+        Returns
+        -------
+        X_leaves : array-like of shape (n_samples, n_estimators)
+            For each datapoint x in X and for each tree in the ensemble,
+            return the index of the leaf x ends up in each estimator.
+        """
+
+        leaves = super().apply(X)
+        leaves = leaves.reshape(X.shape[0], self.estimators_.shape[0])
+        return leaves
+
+    def score(self, X, y, sample_weight=None):
+        """
+        R^2 (coefficient of determination) regression score function.
+        """
+        raw_predictions = self._raw_predict(X).ravel()
+        u = mean_squared_error(y, raw_predictions, sample_weight=sample_weight)
+        v = ((y - y.mean()) ** 2).sum()
+        R_2 = 1 - (u / v)
+        return R_2
+
+class GradientBoostedNodeTreeGClassifier(ClassifierMixin, BaseGradientBoostedTreeG):
+    _SUPPORTED_LOSS = ('ls', 'exponential')
 
     def __init__(self, *, loss='ls', learning_rate=0.1, n_estimators=50,
                  subsample=1.0, criterion='mse', splitter='sklearn',
