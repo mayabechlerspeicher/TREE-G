@@ -7,6 +7,10 @@ The library is Scikit compatible.
 ![Screenshot](attention.png)
 
 ## Getting Started
+Install via pip:
+```
+$ pip install treeg
+```
 
 Create a conda environment with the requierements.txt file:
 ```
