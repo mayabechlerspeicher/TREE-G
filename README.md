@@ -1,10 +1,10 @@
-# TREE-G - Decision Trees Contesting Graph Neural Networks
+# TREE-G: Decision Trees Contesting Graph Neural Networks
 TREE-Gs are decision trees specialized for graph data. They can be used for classificaiton, regression, vertex-labeling, graph-labeling, and edge-labeling.
 The model is described in the paper [TREE-G: Decision Trees Contesting Graph Neural Networks](https://arxiv.org/abs/2207.02760)
 TREE-G is highly recommended when learning over tabular features, and can outperform Graph Neural Networks on such tasks, as shown in the paper.
 The library is Scikit compatible.
 
-![Screenshot](attention.png)
+![example](two_graphs_example.png)
 
 ## Getting Started
 Install via pip:
