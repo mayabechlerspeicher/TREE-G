@@ -1,7 +1,7 @@
 # TREE-G: Decision Trees Contesting Graph Neural Networks
 TREE-Gs are decision trees specialized for graph data. They can be used for classificaiton, regression, vertex-labeling, graph-labeling, and edge-labeling.
-The model is described in the paper [TREE-G: Decision Trees Contesting Graph Neural Networks](https://arxiv.org/abs/2207.02760)
-TREE-G is highly recommended when learning over tabular features, and can outperform Graph Neural Networks on such tasks, as shown in the paper.
+The model is described in the paper [TREE-G: Decision Trees Contesting Graph Neural Networks](https://arxiv.org/abs/2207.02760).
+TREE-G is highly recommended when learning over tabular features, and often outperform Graph Neural Networks on such tasks, as shown in the paper.
 The library is Scikit compatible.
 
 ![example](two_graphs_example.png)
@@ -12,10 +12,7 @@ Install via pip:
 $ pip install treeg
 ```
 
-Create a conda environment with the requierements.txt file:
-```
-$ conda create --name <env> --file requierements.txt
-```
+The dependencies can be found in requirements.txt file.
 
 A simple example of using TREE-G for graph-level classification in a scikit fassion:
 ```
@@ -41,22 +38,17 @@ feature_importance = clf.feature_importances_
 print('feature_importance: ' + str(feature_importance))
 ```
 
-As in the file 'ensembles/gbdt/scikit_example.py'.
+As shown in the file 'ensembles/gbdt/scikit_example.py'.
 
 The ensembles folder contains a scikit compatible implementation of GBDTs with TREE-Gs estimators.
 
-
-
 ### Reproducing the experiments from the paper
-The experiements in the paper used a  3rd party library for boosting called 'starboost', which currently have a bug.
+The experiements in the paper used a  3rd party library for boosting called 'starboost'. This library is unfortunately not maintained and  currently have a bug.
 To fix the bug, please change the following in the library files:
-Line 124 of boosting.py in starboost site-packages files should be changed to: 
+Lines 124 and 179 in boosting.py in the site-packages files of starboost should be changed to: 
 ```
  y_pred[:, i] += self.learning_rate * direction[:, i]  
 ```
-The same fix should be applied in line 179
-/usr/local/lib/python3.8/dist-packages/starboost/
-
 
 All the experiments can be found in the directory. 
 To run graph level experiments run:
@@ -84,6 +76,9 @@ The available datasets are:
 * citeseer
 * pubmed
 * arxiv
+* cornell
+* actor
+* country
 
 ### Using Tree-Gs estimators
 If you wish to use one Tree-G estimator, the data should be in a treeg-graph format.
@@ -111,24 +106,15 @@ y_train, y_valid, y_test = y_nodes[dataset.data.train_mask], y_nodes[dataset.dat
 ```
 
 #### Cite
-If you use TREEG, please cite:
+If you use TREE-G, please cite:
 ```
-@misc{https://doi.org/10.48550/arxiv.2207.02760,
-  doi = {10.48550/ARXIV.2207.02760},
-  
-  url = {https://arxiv.org/abs/2207.02760},
-  
-  author = {Bechler-Speicher, Maya and Globerson, Amir and Gilad-Bachrach, Ran},
-  
-  keywords = {Machine Learning (cs.LG), Artificial Intelligence (cs.AI), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  
-  title = {Decision Trees with Dynamic Graph Features},
-  
-  publisher = {arXiv},
-  
-  year = {2022},
-  
-  copyright = {Creative Commons Attribution 4.0 International}
+@misc{bechlerspeicher2023treeg,
+      title={TREE-G: Decision Trees Contesting Graph Neural Networks}, 
+      author={Maya Bechler-Speicher and Amir Globerson and Ran Gilad-Bachrach},
+      year={2023},
+      eprint={2207.02760},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
 }
 ```
 
