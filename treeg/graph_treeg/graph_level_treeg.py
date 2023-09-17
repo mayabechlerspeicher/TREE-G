@@ -29,7 +29,6 @@ class GraphTreeG(BaseEstimator, RegressorMixin):
                  min_leaf_size: int = 10,
                  attention_types: List[int] = [1, 2, 3, 4],
                  attention_type_sample_probability: float = 0.5,
-                 random_state: int = 42,
                  ):
         self.walk_lens = walk_lens
         self.max_attention_depth = max_attention_depth

@@ -112,7 +112,6 @@ class SparseGraphData(GraphData):
             attention_set)))
         if attention_type == 1:
             sparse_power = self.sparse_adj_powers[walk_len].tolil()
-            # sparse_features_masked = self.sparse_features.tolil()
             sparse_power[:, not_in_attention] = 0
             propagated_features = sparse_power * self.sparse_features
             return propagated_features.toarray()

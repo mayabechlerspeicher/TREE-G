@@ -27,7 +27,6 @@ class NodeTreeG(BaseEstimator, RegressorMixin):
                  min_leaf_size: int = 10,
                  attention_types: List[int] = [1, 4],
                  attention_type_sample_probability: float = 0.5,
-                 random_state: int = 42,
                  ):
         self.node_count = None
         self.tree_depth = None
@@ -124,12 +123,11 @@ class NodeTreeG(BaseEstimator, RegressorMixin):
             attention_type_sample_probability=self.attention_type_sample_probability,
         )
         self.tree_learner_root_ = TreeNodeLearner(params=params, active=np.array(X),
-                                            parent=None)
+                                                  parent=None)
         self.train_L2, self.train_total_gain, self.stats_dict = self.tree_learner_root_.fit(X, y)
         self.node_count, self.tree_depth = self.tree_learner_root_.node_count, self.tree_learner_root_.tree_depth
         self.feature_importances_ = self.compute_feature_importances(self.graph.get_number_of_features())
         return self
-
 
     def compute_feature_importances(self, num_of_features):
         cum_feature_gain = np.zeros(num_of_features)
@@ -138,10 +136,11 @@ class NodeTreeG(BaseEstimator, RegressorMixin):
             if self.stats_dict['feature_index'][idx] > 0:
                 cum_feature_gain[idx] /= self.stats_dict['feature_index'][idx]
         return cum_feature_gain
+
     def cum_feature_gain_traverse(self, trained_node, cum_feature_gain):
         if trained_node.gt is None:
             return
-        cum_feature_gain[trained_node.feature_index] += trained_node.gain
+        cum_feature_gain[trained_node.feature_index] += trained_node.potential_gain
         self.cum_feature_gain_traverse(trained_node.gt, cum_feature_gain)
         self.cum_feature_gain_traverse(trained_node.lte, cum_feature_gain)
 
