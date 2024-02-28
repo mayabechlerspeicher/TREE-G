@@ -1,4 +1,6 @@
 import numpy as np
+import starboost.loss
+
 from treeg.node_treeg.node_level_treeg import NodeTreeG
 from starboost import BoostingClassifier, BoostingRegressor
 from treeg.node_treeg.data_formetter_node_level import DataFormatter
@@ -27,7 +29,7 @@ def train_valid_test_multiclass_paralel(graph, X_train, y_train, X_valid, X_test
                                  attention_type_sample_probability=attention_type_sample_probability
                                  ),
         n_estimators=n_estimators,
-        learning_rate=learning_rate)
+        learning_rate=learning_rate, loss=starboost.loss.LogLoss)
     y = np.array(y_train)
     y = y.flatten()
     gbgta.fit(X_train, y)

@@ -27,6 +27,7 @@ class NodeTreeG(BaseEstimator, RegressorMixin):
                  min_leaf_size: int = 10,
                  attention_types: List[int] = [1, 4],
                  attention_type_sample_probability: float = 0.5,
+                 random_state: int = 0,
                  ):
         self.node_count = None
         self.tree_depth = None
